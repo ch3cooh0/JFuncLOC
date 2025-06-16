@@ -5,6 +5,7 @@ import soot.*;
 import soot.jimple.toolkits.callgraph.CallGraph;
 import soot.jimple.toolkits.callgraph.Edge;
 import soot.options.Options;
+import org.example.DescriptorUtils;
 
 import java.io.File;
 import java.io.IOException;
@@ -140,7 +141,8 @@ public class LocTool {
         ExternalEntry[] entries = mapper.readValue(new File(jsonPath), ExternalEntry[].class);
         for (ExternalEntry entry : entries) {
             SootClass sc = Scene.v().getSootClass(entry.className());
-            SootMethod method = sc.getMethod(entry.method(), Collections.emptyList());
+            List<Type> paramTypes = DescriptorUtils.parseParameterTypes(entry.descriptor());
+            SootMethod method = sc.getMethod(entry.method(), paramTypes);
             functionEntryPoints.computeIfAbsent(entry.function(), k -> new HashSet<>())
                 .add(method);
         }
