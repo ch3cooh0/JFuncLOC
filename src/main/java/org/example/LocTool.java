@@ -1,11 +1,19 @@
 package org.example;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+<<<<<<< codex/不要なファイルを削除し修正
+import soot.*;
+import soot.jimple.toolkits.callgraph.CallGraph;
+import soot.jimple.toolkits.callgraph.Edge;
+import soot.options.Options;
+import org.example.annotation.Function;
+=======
 import soot.*;
 import soot.jimple.toolkits.callgraph.CallGraph;
 import soot.jimple.toolkits.callgraph.Edge;
 import soot.options.Options;
 import org.example.DescriptorUtils;
+>>>>>>> codex/実装-java-cli-loc集計ツール
 
 import java.io.File;
 import java.io.IOException;
