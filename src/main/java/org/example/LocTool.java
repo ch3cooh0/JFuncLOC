@@ -1,11 +1,15 @@
 package org.example;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+
+
 import soot.*;
 import soot.jimple.toolkits.callgraph.CallGraph;
 import soot.jimple.toolkits.callgraph.Edge;
 import soot.options.Options;
 import soot.tagkit.*;
+import org.example.annotation.Function;
+import org.example.DescriptorUtils;
 
 import java.io.File;
 import java.io.IOException;
@@ -16,17 +20,37 @@ public class LocTool {
     @Function("機能単位LOC計測")
     public static void main(String[] args) {
         if (args.length < 2) {
-            System.err.println("使用方法: java -jar loc-tool.jar <mode> <target-jar> [entrypoints.json] [dependencies...]");
+            System.err.println("使用方法:\n" +
+                    "  annotation: java -jar loc-tool.jar annotation <target-jar> [dependencies...]\n" +
+                    "  external/hybrid: java -jar loc-tool.jar <mode> <target-jar> <entrypoints.json> [dependencies...]");
             System.exit(1);
         }
 
         String mode = args[0];
         String targetJar = args[1];
-        String jsonPath = args.length > 2 ? args[2] : null;
-        
-        // 依存関係のjarファイルを取得
-        String[] dependencies = args.length > 3 ? 
-            Arrays.copyOfRange(args, 3, args.length) : new String[0];
+        String jsonPath = null;
+        String[] dependencies;
+
+        switch (mode) {
+            case "annotation" -> {
+                // annotation モード: <mode> <target-jar> [dependencies...]
+                dependencies = args.length > 2 ? Arrays.copyOfRange(args, 2, args.length) : new String[0];
+            }
+            case "external", "hybrid" -> {
+                // external / hybrid モード: <mode> <target-jar> <entrypoints.json> [dependencies...]
+                if (args.length < 3) {
+                    System.err.println("外部/ハイブリッドモードでは entrypoints.json が必要です");
+                    System.exit(1);
+                }
+                jsonPath = args[2];
+                dependencies = args.length > 3 ? Arrays.copyOfRange(args, 3, args.length) : new String[0];
+            }
+            default -> {
+                System.err.println("不明なモード: " + mode);
+                System.exit(1);
+                return; // not reached
+            }
+        }
 
         try {
             setupSoot(targetJar, dependencies);
@@ -172,7 +196,8 @@ public class LocTool {
         ExternalEntry[] entries = mapper.readValue(new File(jsonPath), ExternalEntry[].class);
         for (ExternalEntry entry : entries) {
             SootClass sc = Scene.v().getSootClass(entry.className());
-            SootMethod method = sc.getMethod(entry.method(), Collections.emptyList());
+            List<Type> paramTypes = DescriptorUtils.parseParameterTypes(entry.descriptor());
+            SootMethod method = sc.getMethod(entry.method(), paramTypes);
             functionEntryPoints.computeIfAbsent(entry.function(), k -> new HashSet<>())
                 .add(method);
         }
@@ -189,10 +214,17 @@ public class LocTool {
 
             while (!worklist.isEmpty()) {
                 SootMethod method = worklist.poll();
+                if (!method.getDeclaringClass().isApplicationClass()) {
+                    continue;
+                }
                 if (methods.add(method)) {
                     Iterator<Edge> edges = cg.edgesOutOf(method);
                     while (edges.hasNext()) {
-                        worklist.add(edges.next().tgt());
+                        SootMethod tgt = edges.next().tgt();
+                        if (!tgt.getDeclaringClass().isApplicationClass()) {
+                            continue;
+                        }
+                        worklist.add(tgt);
                     }
                 }
             }
