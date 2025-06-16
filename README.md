@@ -101,9 +101,7 @@ public @interface Function {
 
 ## 📦 依存ライブラリ（pom.xml に含める）
 
-- `org.soot-oss:sootup.core`
-- `org.soot-oss:sootup.java.core`
-- `org.soot-oss:sootup.callgraph`
+- `org.soot-oss:soot:4.5.0`
 - `com.fasterxml.jackson.core:jackson-databind`
 
 ---
@@ -131,7 +129,7 @@ record ExternalEntry(String function, String className, String method, String de
 
 - `@Function` アノテーション定義
 - JSON読込みクラス
-- SootUpを使った呼び出し解析とLOC集計ロジック
+- Sootを使った呼び出し解析とLOC集計ロジック
 - CLIアプリ本体（mainメソッド）
 
 ## ⚠️ 注意事項
