@@ -21,14 +21,18 @@ Soot(https://soot-oss.github.io/soot/) を用いて Java アプリケーショ�
 ## 🧩 モード仕様
 
 ```bash
-java -jar loc-tool.jar <mode> <target-jar> [entrypoints.json] [dependencies...]
+# annotation モード
+java -jar loc-tool.jar annotation <target-jar> [dependencies...]
+
+# external / hybrid モード
+java -jar loc-tool.jar <mode> <target-jar> <entrypoints.json> [dependencies...]
 ```
 
 | パラメータ | 説明 |
 |------------|------|
 | `mode` | 実行モード（annotation/external/hybrid） |
 | `target-jar` | 分析対象のjarファイル |
-| `entrypoints.json` | 外部エントリーポイントモードで使用するJSONファイル（オプション） |
+| `entrypoints.json` | external/hybrid モードで使用するJSONファイル |
 | `dependencies...` | 分析対象のjarファイルの依存関係（オプション） |
 
 | モード       | 説明 |
