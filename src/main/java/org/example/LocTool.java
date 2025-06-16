@@ -49,6 +49,12 @@ public class LocTool {
                 default -> throw new IllegalArgumentException("不明なモード: " + mode);
             }
 
+            Set<SootMethod> allEntries = functionEntryPoints.values().stream()
+                .flatMap(Set::stream)
+                .collect(java.util.stream.Collectors.toSet());
+            Scene.v().setEntryPoints(new ArrayList<>(allEntries));
+            PackManager.v().runPacks();
+
             analyzeAndPrintLoc(functionEntryPoints);
 
         } catch (Exception e) {
@@ -86,6 +92,7 @@ public class LocTool {
         
         Options.v().set_soot_classpath(classpath.toString());
         Options.v().set_prepend_classpath(true);
+        Options.v().set_process_dir(Collections.singletonList(targetJar));
         
         // コールグラフ設定
         Options.v().setPhaseOption("cg", "enabled:true");
@@ -104,20 +111,7 @@ public class LocTool {
         Options.v().set_verbose(true);
         Options.v().set_debug(true);
         
-        // コールグラフの生成を試行
-        try {
-            Scene.v().getCallGraph();
-        } catch (RuntimeException e) {
-            // コールグラフの生成に失敗した場合、手動で生成を試みる
-            Options.v().setPhaseOption("cg", "enabled:true");
-            Options.v().setPhaseOption("cg.cha", "enabled:true");
-            Scene.v().loadNecessaryClasses();
-            
-            // 再度コールグラフの生成を確認
-            if (Scene.v().getCallGraph() == null) {
-                throw new RuntimeException("コールグラフの生成に失敗しました: " + e.getMessage());
-            }
-        }
+        // コールグラフ生成は PackManager 実行時に行う
     }
 
     private static void collectAnnotationEntryPoints(Map<String, Set<SootMethod>> functionEntryPoints) {
