@@ -1,19 +1,15 @@
 package org.example;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-<<<<<<< codex/不要なファイルを削除し修正
+
+
 import soot.*;
 import soot.jimple.toolkits.callgraph.CallGraph;
 import soot.jimple.toolkits.callgraph.Edge;
 import soot.options.Options;
+import soot.tagkit.*;
 import org.example.annotation.Function;
-=======
-import soot.*;
-import soot.jimple.toolkits.callgraph.CallGraph;
-import soot.jimple.toolkits.callgraph.Edge;
-import soot.options.Options;
 import org.example.DescriptorUtils;
->>>>>>> codex/実装-java-cli-loc集計ツール
 
 import java.io.File;
 import java.io.IOException;
@@ -145,24 +141,55 @@ public class LocTool {
 
     private static void collectAnnotationEntryPoints(Map<String, Set<SootMethod>> functionEntryPoints) {
         for (SootClass sc : Scene.v().getApplicationClasses()) {
-            Function classAnnotation = (Function) sc.getTag("Function");
-            if (classAnnotation != null) {
-                String functionName = classAnnotation.value();
-                functionEntryPoints.computeIfAbsent(functionName, k -> new HashSet<>())
+            String classFunction = getFunctionAnnotationValue(sc);
+            if (classFunction != null) {
+                functionEntryPoints.computeIfAbsent(classFunction, k -> new HashSet<>())
                     .addAll(sc.getMethods().stream()
-                        .filter(m -> m.isPublic())
+                        .filter(SootMethod::isPublic)
                         .collect(java.util.stream.Collectors.toSet()));
             }
 
             for (SootMethod method : sc.getMethods()) {
-                Function methodAnnotation = (Function) method.getTag("Function");
-                if (methodAnnotation != null) {
-                    String functionName = methodAnnotation.value();
-                    functionEntryPoints.computeIfAbsent(functionName, k -> new HashSet<>())
+                String methodFunction = getFunctionAnnotationValue(method);
+                if (methodFunction != null) {
+                    functionEntryPoints.computeIfAbsent(methodFunction, k -> new HashSet<>())
                         .add(method);
                 }
             }
         }
+    }
+
+    private static String getFunctionAnnotationValue(Host host) {
+        for (Tag tag : host.getTags()) {
+            if (tag instanceof VisibilityAnnotationTag vat) {
+                String val = extractFunctionFromVisibilityTag(vat);
+                if (val != null) {
+                    return val;
+                }
+            } else if (tag instanceof VisibilityParameterAnnotationTag pTag) {
+                for (VisibilityAnnotationTag vat : pTag.getVisibilityAnnotations()) {
+                    String val = extractFunctionFromVisibilityTag(vat);
+                    if (val != null) {
+                        return val;
+                    }
+                }
+            }
+        }
+        return null;
+    }
+
+    private static String extractFunctionFromVisibilityTag(VisibilityAnnotationTag vat) {
+        for (AnnotationTag at : vat.getAnnotations()) {
+            String type = at.getType();
+            if (type != null && type.endsWith("/Function;")) {
+                for (AnnotationElem elem : at.getElems()) {
+                    if (elem instanceof AnnotationStringElem str && "value".equals(str.getName())) {
+                        return str.getValue();
+                    }
+                }
+            }
+        }
+        return null;
     }
 
     private static void collectExternalEntryPoints(String jsonPath, Map<String, Set<SootMethod>> functionEntryPoints) throws IOException {
