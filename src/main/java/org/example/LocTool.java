@@ -5,6 +5,7 @@ import soot.*;
 import soot.jimple.toolkits.callgraph.CallGraph;
 import soot.jimple.toolkits.callgraph.Edge;
 import soot.options.Options;
+import org.example.annotation.Function;
 
 import java.io.File;
 import java.io.IOException;
