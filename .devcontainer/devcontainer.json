@@ -15,6 +15,5 @@
             ]
         }
     },
-    "forwardPorts": [],
-    "postCreateCommand": "mvn -version"
+    "forwardPorts": []
 } 

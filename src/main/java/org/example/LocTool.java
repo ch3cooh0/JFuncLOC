@@ -1,71 +1,184 @@
 package org.example;
 
-import org.example.annotation.Function;
-import org.sootup.core.model.SootClass;
-import org.sootup.core.model.SootMethod;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import soot.*;
+import soot.jimple.toolkits.callgraph.CallGraph;
+import soot.jimple.toolkits.callgraph.Edge;
+import soot.options.Options;
 
 import java.io.File;
 import java.io.IOException;
-import java.lang.reflect.Modifier;
 import java.util.*;
 
-/**
- * CLI アプリ本体
- */
 public class LocTool {
-
-    public static void main(String[] args) throws Exception {
-        if(args.length < 2) {
-            System.err.println("Usage: java -jar loc-tool.jar <target.jar> <mode> [entrypoints.json]");
-            return;
+    private static final ObjectMapper mapper = new ObjectMapper();
+    @Function("機能単位LOC計測")
+    public static void main(String[] args) {
+        if (args.length < 2) {
+            System.err.println("使用方法: java -jar loc-tool.jar <mode> <target-jar> [entrypoints.json] [dependencies...]");
+            System.exit(1);
         }
-        File jar = new File(args[0]);
-        String mode = args[1];
-        File json = args.length >=3 ? new File(args[2]) : null;
 
-        SootAnalyzer analyzer = new SootAnalyzer(jar);
-        Map<String, List<SootMethod>> entries = new HashMap<>();
+        String mode = args[0];
+        String targetJar = args[1];
+        String jsonPath = args.length > 2 ? args[2] : null;
+        
+        // 依存関係のjarファイルを取得
+        String[] dependencies = args.length > 3 ? 
+            Arrays.copyOfRange(args, 3, args.length) : new String[0];
 
-        if("annotation".equals(mode) || "hybrid".equals(mode)) {
-            entries.putAll(findAnnotationEntries(analyzer));
-        }
-        if(("external".equals(mode) || "hybrid".equals(mode)) && json != null) {
-            for(ExternalEntry e : EntryLoader.load(json)) {
-                SootMethod m = analyzer.getScene().getMethod(e.className()+":"+e.method()+e.descriptor());
-                if(m != null) {
-                    entries.computeIfAbsent(e.function(), k->new ArrayList<>()).add(m);
+        try {
+            setupSoot(targetJar, dependencies);
+            Map<String, Set<SootMethod>> functionEntryPoints = new HashMap<>();
+
+            switch (mode) {
+                case "annotation" -> collectAnnotationEntryPoints(functionEntryPoints);
+                case "external" -> {
+                    if (jsonPath == null) {
+                        throw new IllegalArgumentException("外部エントリーポイントモードではJSONファイルが必要です");
+                    }
+                    collectExternalEntryPoints(jsonPath, functionEntryPoints);
                 }
+                case "hybrid" -> {
+                    if (jsonPath == null) {
+                        throw new IllegalArgumentException("ハイブリッドモードではJSONファイルが必要です");
+                    }
+                    collectAnnotationEntryPoints(functionEntryPoints);
+                    collectExternalEntryPoints(jsonPath, functionEntryPoints);
+                }
+                default -> throw new IllegalArgumentException("不明なモード: " + mode);
             }
-        }
 
-        for(var entry : entries.entrySet()) {
-            int loc = 0;
-            for(SootMethod m : entry.getValue()) {
-                Set<SootMethod> reachable = analyzer.reachableMethods(m);
-                loc += analyzer.countLOC(reachable);
-            }
-            System.out.printf("機能: %s, 有効LOC: %d%n", entry.getKey(), loc);
+            analyzeAndPrintLoc(functionEntryPoints);
+
+        } catch (Exception e) {
+            System.err.println("エラーが発生しました: " + e.getMessage());
+            e.printStackTrace();
+            System.exit(1);
         }
     }
 
-    private static Map<String, List<SootMethod>> findAnnotationEntries(SootAnalyzer analyzer) {
-        Map<String, List<SootMethod>> map = new HashMap<>();
-        for(SootClass cls : analyzer.getScene().getApplicationClasses()) {
-            if(cls.hasAnnotation(Function.class.getName())) {
-                String func = cls.getAnnotation(Function.class.getName()).getMemberValue("value").getValue().toString();
-                for(SootMethod m : cls.getMethods()) {
-                    if(Modifier.isPublic(m.getModifiers())) {
-                        map.computeIfAbsent(func, k->new ArrayList<>()).add(m);
-                    }
-                }
+    private static void setupSoot(String targetJar, String[] dependencies) {
+        // 基本設定
+        Options.v().set_whole_program(true);
+        Options.v().set_app(true);
+        Options.v().set_allow_phantom_refs(true);
+        Options.v().set_output_format(Options.output_format_none);
+        
+        // クラスパス設定
+        StringBuilder classpath = new StringBuilder(targetJar);
+        for (String dep : dependencies) {
+            classpath.append(File.pathSeparator).append(dep);
+        }
+        
+        // Java 9以降のモジュールパスを設定
+        String javaHome = System.getProperty("java.home");
+        String modulesPath = javaHome + File.separator + "lib" + File.separator + "modules";
+        if (new File(modulesPath).exists()) {
+            classpath.append(File.pathSeparator).append(modulesPath);
+        }
+        
+        // Java 17/21のシステムモジュールを追加
+        String systemModules = System.getProperty("java.class.path");
+        if (systemModules != null && !systemModules.isEmpty()) {
+            classpath.append(File.pathSeparator).append(systemModules);
+        }
+        
+        Options.v().set_soot_classpath(classpath.toString());
+        Options.v().set_prepend_classpath(true);
+        
+        // コールグラフ設定
+        Options.v().setPhaseOption("cg", "enabled:true");
+        Options.v().setPhaseOption("cg.cha", "enabled:true");
+        
+        // Java 9以降のモジュールシステムの設定
+        Options.v().set_include_all(true);
+        Options.v().set_allow_phantom_refs(true);
+        Options.v().set_keep_line_number(true);
+        Options.v().set_keep_offset(true);
+        
+        // シーンの初期化
+        Scene.v().loadNecessaryClasses();
+        
+        // デバッグ情報の出力
+        Options.v().set_verbose(true);
+        Options.v().set_debug(true);
+        
+        // コールグラフの生成を試行
+        try {
+            Scene.v().getCallGraph();
+        } catch (RuntimeException e) {
+            // コールグラフの生成に失敗した場合、手動で生成を試みる
+            Options.v().setPhaseOption("cg", "enabled:true");
+            Options.v().setPhaseOption("cg.cha", "enabled:true");
+            Scene.v().loadNecessaryClasses();
+            
+            // 再度コールグラフの生成を確認
+            if (Scene.v().getCallGraph() == null) {
+                throw new RuntimeException("コールグラフの生成に失敗しました: " + e.getMessage());
             }
-            for(SootMethod m : cls.getMethods()) {
-                if(m.hasAnnotation(Function.class.getName())) {
-                    String func = m.getAnnotation(Function.class.getName()).getMemberValue("value").getValue().toString();
-                    map.computeIfAbsent(func, k->new ArrayList<>()).add(m);
+        }
+    }
+
+    private static void collectAnnotationEntryPoints(Map<String, Set<SootMethod>> functionEntryPoints) {
+        for (SootClass sc : Scene.v().getApplicationClasses()) {
+            Function classAnnotation = (Function) sc.getTag("Function");
+            if (classAnnotation != null) {
+                String functionName = classAnnotation.value();
+                functionEntryPoints.computeIfAbsent(functionName, k -> new HashSet<>())
+                    .addAll(sc.getMethods().stream()
+                        .filter(m -> m.isPublic())
+                        .collect(java.util.stream.Collectors.toSet()));
+            }
+
+            for (SootMethod method : sc.getMethods()) {
+                Function methodAnnotation = (Function) method.getTag("Function");
+                if (methodAnnotation != null) {
+                    String functionName = methodAnnotation.value();
+                    functionEntryPoints.computeIfAbsent(functionName, k -> new HashSet<>())
+                        .add(method);
                 }
             }
         }
-        return map;
+    }
+
+    private static void collectExternalEntryPoints(String jsonPath, Map<String, Set<SootMethod>> functionEntryPoints) throws IOException {
+        ExternalEntry[] entries = mapper.readValue(new File(jsonPath), ExternalEntry[].class);
+        for (ExternalEntry entry : entries) {
+            SootClass sc = Scene.v().getSootClass(entry.className());
+            SootMethod method = sc.getMethod(entry.method(), Collections.emptyList());
+            functionEntryPoints.computeIfAbsent(entry.function(), k -> new HashSet<>())
+                .add(method);
+        }
+    }
+
+    private static void analyzeAndPrintLoc(Map<String, Set<SootMethod>> functionEntryPoints) {
+        CallGraph cg = Scene.v().getCallGraph();
+        Map<String, Set<SootMethod>> reachableMethods = new HashMap<>();
+
+        for (Map.Entry<String, Set<SootMethod>> entry : functionEntryPoints.entrySet()) {
+            String functionName = entry.getKey();
+            Set<SootMethod> methods = new HashSet<>();
+            Queue<SootMethod> worklist = new LinkedList<>(entry.getValue());
+
+            while (!worklist.isEmpty()) {
+                SootMethod method = worklist.poll();
+                if (methods.add(method)) {
+                    Iterator<Edge> edges = cg.edgesOutOf(method);
+                    while (edges.hasNext()) {
+                        worklist.add(edges.next().tgt());
+                    }
+                }
+            }
+
+            reachableMethods.put(functionName, methods);
+        }
+
+        for (Map.Entry<String, Set<SootMethod>> entry : reachableMethods.entrySet()) {
+            int totalLoc = entry.getValue().stream()
+                .mapToInt(m -> m.getActiveBody().getUnits().size())
+                .sum();
+            System.out.printf("機能: %s, 有効LOC: %d%n", entry.getKey(), totalLoc);
+        }
     }
 }
