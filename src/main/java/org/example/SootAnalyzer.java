@@ -11,15 +11,15 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
-import java.util.logging.Logger;
-import java.util.logging.Level;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Soot を用いた呼び出し解析と LOC 集計を行うユーティリティクラス。
  * 並列処理をサポートし、パフォーマンスを最適化。
  */
 public class SootAnalyzer implements AutoCloseable {
-    private static final Logger LOGGER = Logger.getLogger(SootAnalyzer.class.getName());
+    private static final Logger LOGGER = LoggerFactory.getLogger(SootAnalyzer.class);
     private final ExecutorService executorService;
     private static final int DEFAULT_THREAD_POOL_SIZE = Runtime.getRuntime().availableProcessors();
     private final Map<SootMethod, Integer> locCache;
@@ -68,7 +68,7 @@ public class SootAnalyzer implements AutoCloseable {
                     }
                 }
             } catch (Exception e) {
-                LOGGER.log(Level.WARNING, "メソッド " + m.getSignature() + " の解析中にエラーが発生", e);
+                LOGGER.warn("メソッド {} の解析中にエラーが発生", m.getSignature(), e);
             }
         }
         return result;
@@ -90,12 +90,12 @@ public class SootAnalyzer implements AutoCloseable {
                                 method.retrieveActiveBody();
                                 return method.getActiveBody().getUnits().size();
                             } catch (Exception e) {
-                                LOGGER.log(Level.WARNING, "メソッド " + method.getSignature() + " のLOC計算中にエラーが発生", e);
+                                LOGGER.warn("メソッド {} のLOC計算中にエラーが発生", method.getSignature(), e);
                                 return 0;
                             }
                         });
                     } catch (Exception e) {
-                        LOGGER.log(Level.SEVERE, "メソッド " + m.getSignature() + " の処理中にエラーが発生", e);
+                        LOGGER.error("メソッド {} の処理中にエラーが発生", m.getSignature(), e);
                         return 0;
                     }
                 }));
@@ -106,7 +106,7 @@ public class SootAnalyzer implements AutoCloseable {
                         try {
                             return future.get();
                         } catch (Exception e) {
-                            LOGGER.log(Level.SEVERE, "LOC計算の結果取得中にエラーが発生", e);
+                            LOGGER.error("LOC計算の結果取得中にエラーが発生", e);
                             return 0;
                         }
                     })
@@ -125,7 +125,7 @@ public class SootAnalyzer implements AutoCloseable {
                     method.retrieveActiveBody();
                     classLoc += method.getActiveBody().getUnits().size();
                 } catch (Exception e) {
-                    LOGGER.log(Level.WARNING, "メソッド " + method.getSignature() + " の解析中にエラーが発生", e);
+                    LOGGER.warn("メソッド {} の解析中にエラーが発生", method.getSignature(), e);
                 }
             }
             complexity.put(cls.getName(), classLoc);
@@ -139,7 +139,7 @@ public class SootAnalyzer implements AutoCloseable {
             executorService.shutdown();
             locCache.clear();
         } catch (Exception e) {
-            LOGGER.log(Level.SEVERE, "リソースの解放中にエラーが発生", e);
+            LOGGER.error("リソースの解放中にエラーが発生", e);
         }
     }
 }
