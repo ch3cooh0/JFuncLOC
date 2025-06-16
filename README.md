@@ -54,7 +54,7 @@ java -jar loc-tool.jar hybrid target.jar entrypoints.json dependency1.jar depend
 
 ## 🔍 機能
 
-- SootUp によりコールグラフを構築
+- Soot によりコールグラフを構築
 - 起点から到達可能なメソッドの LOC を合算
 - 同一機能に複数起点があっても OK
 - 未使用メソッド（コールグラフに到達しない）は除外
