@@ -59,10 +59,16 @@ public class SootAnalyzer implements AutoCloseable {
 
         while (!work.isEmpty()) {
             SootMethod m = work.pop();
+            if (!m.getDeclaringClass().isApplicationClass()) {
+                continue;
+            }
             try {
                 Iterator<Edge> edges = cg.edgesOutOf(m);
                 while (edges.hasNext()) {
                     SootMethod tgt = edges.next().tgt();
+                    if (!tgt.getDeclaringClass().isApplicationClass()) {
+                        continue;
+                    }
                     if (result.add(tgt)) {
                         work.push(tgt);
                     }
