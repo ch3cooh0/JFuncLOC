@@ -157,10 +157,17 @@ public class LocTool {
 
             while (!worklist.isEmpty()) {
                 SootMethod method = worklist.poll();
+                if (!method.getDeclaringClass().isApplicationClass()) {
+                    continue;
+                }
                 if (methods.add(method)) {
                     Iterator<Edge> edges = cg.edgesOutOf(method);
                     while (edges.hasNext()) {
-                        worklist.add(edges.next().tgt());
+                        SootMethod tgt = edges.next().tgt();
+                        if (!tgt.getDeclaringClass().isApplicationClass()) {
+                            continue;
+                        }
+                        worklist.add(tgt);
                     }
                 }
             }
