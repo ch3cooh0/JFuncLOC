@@ -1,6 +1,5 @@
 package org.example;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import soot.*;
 import soot.jimple.toolkits.callgraph.CallGraph;
 import soot.jimple.toolkits.callgraph.Edge;
@@ -11,7 +10,6 @@ import java.io.IOException;
 import java.util.*;
 
 public class LocTool {
-    private static final ObjectMapper mapper = new ObjectMapper();
     @Function("機能単位LOC計測")
     public static void main(String[] args) {
         if (args.length < 2) {
@@ -137,7 +135,7 @@ public class LocTool {
     }
 
     private static void collectExternalEntryPoints(String jsonPath, Map<String, Set<SootMethod>> functionEntryPoints) throws IOException {
-        ExternalEntry[] entries = mapper.readValue(new File(jsonPath), ExternalEntry[].class);
+        List<ExternalEntry> entries = EntryLoader.load(new File(jsonPath));
         for (ExternalEntry entry : entries) {
             SootClass sc = Scene.v().getSootClass(entry.className());
             SootMethod method = sc.getMethod(entry.method(), Collections.emptyList());
