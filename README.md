@@ -4,7 +4,7 @@
 
 ## 📦 プロジェクト概要
 
-SootUp を用いて Java アプリケーションのコールグラフを解析し、機能単位の LOC（行数）を集計する CLI ツールを Maven プロジェクトとして実装してください。
+Soot(https://soot-oss.github.io/soot/) を用いて Java アプリケーションのコールグラフを解析し、機能単位の LOC（行数）を集計する CLI ツールを Maven プロジェクトとして実装してください。
 
 ---
 
@@ -21,8 +21,19 @@ SootUp を用いて Java アプリケーションのコールグラフを解析�
 ## 🧩 モード仕様
 
 ```bash
-java -jar loc-tool.jar <mode> [entrypoints.json]
+# annotation モード
+java -jar loc-tool.jar annotation <target-jar> [dependencies...]
+
+# external / hybrid モード
+java -jar loc-tool.jar <mode> <target-jar> <entrypoints.json> [dependencies...]
 ```
+
+| パラメータ | 説明 |
+|------------|------|
+| `mode` | 実行モード（annotation/external/hybrid） |
+| `target-jar` | 分析対象のjarファイル |
+| `entrypoints.json` | external/hybrid モードで使用するJSONファイル |
+| `dependencies...` | 分析対象のjarファイルの依存関係（オプション） |
 
 | モード       | 説明 |
 |--------------|------|
@@ -30,11 +41,24 @@ java -jar loc-tool.jar <mode> [entrypoints.json]
 | `external`   | 外部 JSON ファイルで指定されたメソッド群を起点として解析 |
 | `hybrid`     | 両方を組み合わせて重複排除した起点群で解析 |
 
+### 実行例
+
+```bash
+# アノテーションモードで実行（依存関係なし）
+java -jar loc-tool.jar annotation target.jar
+
+# 外部エントリーポイントモードで実行（依存関係あり）
+java -jar loc-tool.jar external target.jar entrypoints.json dependency1.jar dependency2.jar
+
+# ハイブリッドモードで実行（依存関係あり）
+java -jar loc-tool.jar hybrid target.jar entrypoints.json dependency1.jar dependency2.jar
+```
+
 ---
 
 ## 🔍 機能
 
-- SootUp によりコールグラフを構築
+- Soot によりコールグラフを構築
 - 起点から到達可能なメソッドの LOC を合算
 - 同一機能に複数起点があっても OK
 - 未使用メソッド（コールグラフに到達しない）は除外
@@ -81,9 +105,7 @@ public @interface Function {
 
 ## 📦 依存ライブラリ（pom.xml に含める）
 
-- `org.soot-oss:sootup.core`
-- `org.soot-oss:sootup.java.core`
-- `org.soot-oss:sootup.callgraph`
+- `org.soot-oss:soot:4.5.0`
 - `com.fasterxml.jackson.core:jackson-databind`
 
 ---
@@ -111,11 +133,13 @@ record ExternalEntry(String function, String className, String method, String de
 
 - `@Function` アノテーション定義
 - JSON読込みクラス
-- SootUpを使った呼び出し解析とLOC集計ロジック
+- Sootを使った呼び出し解析とLOC集計ロジック
 - CLIアプリ本体（mainメソッド）
 
-```bash
-java -jar loc-tool.jar annotation
-java -jar loc-tool.jar external entrypoints.json
-java -jar loc-tool.jar hybrid entrypoints.json
-```
+## ⚠️ 注意事項
+
+- 分析対象のjarファイルは、実行時のクラスパスに含まれている必要はありません
+- 依存関係のjarファイルは、必要に応じて指定してください
+- アノテーションモードでは、`@Function`アノテーションが付与されたクラスやメソッドがエントリーポイントとして使用されます
+- 外部エントリーポイントモードでは、JSONファイルで指定されたメソッドがエントリーポイントとして使用されます
+- ハイブリッドモードでは、アノテーションとJSONファイルの両方で指定されたエントリーポイントが使用されます

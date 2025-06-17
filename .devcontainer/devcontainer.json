@@ -1,0 +1,20 @@
+{
+    "name": "Java Maven Development",
+    "image": "maven:3.9-eclipse-temurin-17",
+    "features": {
+        "ghcr.io/devcontainers/features/java:1": {
+            "version": "17",
+            "installMaven": true
+        }
+    },
+    "customizations": {
+        "vscode": {
+            "extensions": [
+                "vscjava.vscode-java-pack",
+                "vscjava.vscode-maven"
+            ]
+        }
+    },
+    "forwardPorts": []
+    // git config --global --unset commit.gpgsign && git config --global --unset gpg.format && git config --global --unset gpg.ssh.program
+} 
