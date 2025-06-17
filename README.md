@@ -1,145 +1,64 @@
-# JFuncLOC
-機能単位でLOC計測
-# Java CLI アプリケーション: 機能単位のLOC集計ツール
+# 機能単位LOC計測ツール
 
-## 📦 プロジェクト概要
+## 📖 概要
 
-Soot(https://soot-oss.github.io/soot/) を用いて Java アプリケーションのコールグラフを解析し、ファイルに出力する。
+本ツールは、Javaプロジェクトにおける「機能」ごとのコード規模（LOC: Lines of Code）を自動集計します。  
+1つの機能に対し、複数の起点関数を定義でき、それらから呼び出される関数のLOCを合算します。
 
----
+## 🧩 構成コンポーネント
 
-## 🎯 要件
+| モジュール名 | 説明 |
+|-------------|------|
+| `callgraph-generator` | Sootを使用してコールグラフを構築し、起点関数からの到達関数を抽出 |
+| `function-loc-counter` | Spoonを使用してJava関数ごとのLOC（開始行〜終了行）を計測 |
+| `entrypoint-detector` | 起点関数を以下の2通りで収集：<ul><li>外部定義ファイル（YAML/JSON）</li><li>アノテーション（例：`@EntryPoint("featureA")`）</li></ul> |
+| `feature-loc-aggregator` | 起点関数 + コールグラフ + 関数LOCの情報を統合して、機能ごとの総LOCを集計 |
 
-- Java 17 以上
-- Maven 管理
-- コマンドライン引数でモード切り替え可能
-- jarファイル（対象アプリ）を静的解析
-- JSONファイルで外部起点指定が可能（external/hybrid モード時）
+## 📂 入力
 
----
+### 🔹 外部定義ファイル（YAML）
 
-## 🧩 モード仕様
-
-```bash
-# annotation モード
-java -jar loc-tool.jar annotation <target-jar> [dependencies...]
-
-# external / hybrid モード
-java -jar loc-tool.jar <mode> <target-jar> <entrypoints.json> [dependencies...]
+```yaml
+featureA:
+  - com.example.controller.FooController#getList
+  - com.example.service.FooService#process
+featureB:
+  - com.example.batch.BatchMain#run
 ```
 
-| パラメータ | 説明 |
-|------------|------|
-| `mode` | 実行モード（annotation/external/hybrid） |
-| `target-jar` | 分析対象のjarファイル |
-| `entrypoints.json` | external/hybrid モードで使用するJSONファイル |
-| `dependencies...` | 分析対象のjarファイルの依存関係（オプション） |
-
-| モード       | 説明 |
-|--------------|------|
-| `annotation` | アノテーション `@Function` に基づいて起点メソッドを抽出 |
-| `external`   | 外部 JSON ファイルで指定されたメソッド群を起点として解析 |
-| `hybrid`     | 両方を組み合わせて重複排除した起点群で解析 |
-
-### 実行例
-
-```bash
-# アノテーションモードで実行（依存関係なし）
-java -jar loc-tool.jar annotation target.jar
-
-# 外部エントリーポイントモードで実行（依存関係あり）
-java -jar loc-tool.jar external target.jar entrypoints.json dependency1.jar dependency2.jar
-
-# ハイブリッドモードで実行（依存関係あり）
-java -jar loc-tool.jar hybrid target.jar entrypoints.json dependency1.jar dependency2.jar
-```
-
----
-
-## 🔍 機能
-
-- Soot によりコールグラフを構築
-- 起点から到達可能なメソッドの LOC を合算
-- 同一機能に複数起点があっても OK
-- 未使用メソッド（コールグラフに到達しない）は除外
-- 標準出力で `機能名: 有効LOC` を出力
-
----
-
-## 📄 アノテーション仕様
+### 🔹 アノテーション
 
 ```java
-@Retention(RetentionPolicy.CLASS)
-@Target({ElementType.TYPE, ElementType.METHOD})
-public @interface Function {
-    String value();
-}
+@EntryPoint("featureA")
+public void getList() { ... }
 ```
 
-- クラス/メソッドのいずれかに付与可能
-- クラスに付いていた場合はそのクラス内の `public` メソッドを起点候補とする
+## 📤 出力
 
----
+### 📄 機能別LOCレポート（CSV形式）
 
-## 📄 JSONファイル仕様
+| 機能名      | 総LOC | 起点関数数 | 呼出関数数 |
+|------------|-------|------------|------------|
+| featureA   | 245   | 2          | 18         |
+| featureB   | 130   | 1          | 10         |
 
-```json
-[
-  {
-    "function": "ユーザー出力",
-    "class": "com.example.batch.ExportUserBatch",
-    "method": "execute",
-    "descriptor": "()V"
-  }
-]
+## ⚙️ 設定オプション（予定）
+
+- 除外対象クラス（標準ライブラリなど）
+- オーバーロード判定に引数型も含めるか
+- LOC重複の合算可否（純増・延べLOCの切替）
+
+## 📦 依存ライブラリ
+
+- Soot：コールグラフ構築用
+- Spoon：ソースコードの静的解析とLOC測定用
+
+## 🏁 実行方法
+
+```bash
+java -jar loc-feature-analyzer.jar --mode=analyze --source=./src --entry=entrypoints.yaml
 ```
 
-| フィールド | 説明 |
-|------------|------|
-| `function` | 機能名（日本語も可） |
-| `class`    | 完全修飾クラス名 |
-| `method`   | メソッド名 |
-| `descriptor` | JVMメソッド記述子（例：`(Ljava/lang/String;)V`） |
+## 📌 ライセンス
 
----
-
-## 📦 依存ライブラリ（pom.xml に含める）
-
-- `org.soot-oss:soot:4.5.0`
-- `com.fasterxml.jackson.core:jackson-databind`
-
----
-
-## 📁 出力例
-
-```
-機能: ユーザー出力, 有効LOC: 42
-機能: 勤怠集計, 有効LOC: 85
-```
-
----
-
-## 📄 その他補助クラス
-
-```java
-record ExternalEntry(String function, String className, String method, String descriptor) {}
-```
-
----
-
-## 🔧 Codex への指示
-
-この仕様に基づいて以下を含む Maven プロジェクトを作成してください：
-
-- `@Function` アノテーション定義
-- JSON読込みクラス
-- Sootを使った呼び出し解析とLOC集計ロジック
-- CLIアプリ本体（mainメソッド）
-
-## ⚠️ 注意事項
-
-- 分析対象のjarファイルは、実行時のクラスパスに含まれている必要はありません
-- 依存関係のjarファイルは、必要に応じて指定してください
-- アノテーションモードでは、`@Function`アノテーションが付与されたクラスやメソッドがエントリーポイントとして使用されます
-- 外部エントリーポイントモードでは、JSONファイルで指定されたメソッドがエントリーポイントとして使用されます
-- ハイブリッドモードでは、アノテーションとJSONファイルの両方で指定されたエントリーポイントが使用されます
+MIT License
