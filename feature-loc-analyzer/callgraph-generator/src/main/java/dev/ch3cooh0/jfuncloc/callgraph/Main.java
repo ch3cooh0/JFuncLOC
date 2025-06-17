@@ -87,25 +87,48 @@ public class Main {
      * @throws IllegalArgumentException 引数の形式が不正な場合
      */
     static CommandLineArgs parseCommandLineArgs(String[] args) {
-        if (args.length < 1) {
-            printUsage();
-            exitHandler.exit(1);
-            throw new IllegalArgumentException("引数が不足しています"); // 到達しないがテスト用
-        }
-
-        String inputPath = args[0];
-        String outputPath = args.length > 1 ? args[1] : DEFAULT_OUTPUT_FILE;
+        String inputPath = null;
+        String outputPath = DEFAULT_OUTPUT_FILE;
         String targetPackage = null;
 
-        for (int i = 2; i < args.length; i++) {
-            if (args[i].equals("-p") || args[i].equals("--package")) {
-                if (i + 1 < args.length) {
-                    targetPackage = args[i + 1];
-                    i++;
-                } else {
-                    throw new IllegalArgumentException("エラー: パッケージ名が指定されていません");
-                }
+        for (int i = 0; i < args.length; i++) {
+            switch (args[i]) {
+                case "-i":
+                case "--input":
+                    if (i + 1 < args.length) {
+                        inputPath = args[i + 1];
+                        i++;
+                    } else {
+                        throw new IllegalArgumentException("エラー: 入力パスが指定されていません");
+                    }
+                    break;
+                case "-o":
+                case "--output":
+                    if (i + 1 < args.length) {
+                        outputPath = args[i + 1];
+                        i++;
+                    } else {
+                        throw new IllegalArgumentException("エラー: 出力ファイルパスが指定されていません");
+                    }
+                    break;
+                case "-p":
+                case "--package":
+                    if (i + 1 < args.length) {
+                        targetPackage = args[i + 1];
+                        i++;
+                    } else {
+                        throw new IllegalArgumentException("エラー: パッケージ名が指定されていません");
+                    }
+                    break;
+                default:
+                    throw new IllegalArgumentException("エラー: 不明なオプション: " + args[i]);
             }
+        }
+
+        if (inputPath == null) {
+            printUsage();
+            exitHandler.exit(1);
+            throw new IllegalArgumentException("エラー: 入力パスが指定されていません");
         }
 
         return new CommandLineArgs(inputPath, outputPath, targetPackage);
@@ -192,9 +215,10 @@ public class Main {
      * 使用方法を標準出力に表示します。
      */
     private static void printUsage() {
-        System.out.println("使用方法: java -jar callgraph-generator.jar <入力パス> [出力ファイル] [-p|--package <パッケージ名>]");
-        System.out.println("  <入力パス>      : .jarまたはclassファイルのディレクトリ");
-        System.out.println("  [出力ファイル]  : 出力するCSVファイルのパス（デフォルト: callgraph.csv）");
-        System.out.println("  -p, --package   : 対象とするパッケージ名（オプション）");
+        System.out.println("使用方法: java -jar callgraph-generator.jar [オプション]");
+        System.out.println("オプション:");
+        System.out.println("  -i, --input <パス>    : 入力パス（.jarまたはclassファイルのディレクトリ）（必須）");
+        System.out.println("  -o, --output <パス>   : 出力するCSVファイルのパス（デフォルト: callgraph.csv）");
+        System.out.println("  -p, --package <名前>  : 対象とするパッケージ名");
     }
 } 

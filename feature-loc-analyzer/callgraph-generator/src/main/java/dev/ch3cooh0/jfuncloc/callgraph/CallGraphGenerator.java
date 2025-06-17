@@ -5,6 +5,7 @@ import soot.*;
 import soot.jimple.toolkits.callgraph.CallGraph;
 import soot.jimple.toolkits.callgraph.Edge;
 import soot.options.Options;
+import soot.PackManager;
 
 import java.io.File;
 import java.util.*;
@@ -58,6 +59,11 @@ public class CallGraphGenerator {
         System.out.println("デバッグ: クラス読み込み開始");
         Scene.v().loadNecessaryClasses();
         System.out.println("デバッグ: クラス読み込み完了");
+        
+        // 解析フェーズの実行
+        System.out.println("デバッグ: 解析フェーズ実行開始");
+        PackManager.v().runPacks();
+        System.out.println("デバッグ: 解析フェーズ実行完了");
         
         // コールグラフの構築と解析
         System.out.println("デバッグ: コールグラフ構築開始");
@@ -136,6 +142,16 @@ public class CallGraphGenerator {
             if (targetPackage != null) {
                 System.out.println("デバッグ: パッケージフィルタリング設定: " + targetPackage);
                 Options.v().set_include(Collections.singletonList(targetPackage + ".*"));
+                // 除外パッケージの設定を追加
+                List<String> excludePackages = Arrays.asList(
+                    "java.*",
+                    "javax.*",
+                    "sun.*",
+                    "com.sun.*",
+                    "jdk.*",
+                    "com.fasterxml.*"  // Jacksonライブラリを除外
+                );
+                Options.v().set_exclude(excludePackages);
             }
         }
     }
@@ -176,8 +192,8 @@ public class CallGraphGenerator {
 
         private boolean shouldSkipEdge(SootMethod src, SootMethod tgt) {
             if (targetPackage != null) {
-                return !src.getDeclaringClass().getName().startsWith(targetPackage) ||
-                       !tgt.getDeclaringClass().getName().startsWith(targetPackage);
+                // 呼び出し元のクラスのみをパッケージチェック
+                return !src.getDeclaringClass().getName().startsWith(targetPackage);
             }
             return isLibraryClass(src.getDeclaringClass()) || isLibraryClass(tgt.getDeclaringClass());
         }
@@ -188,7 +204,8 @@ public class CallGraphGenerator {
                    name.startsWith("javax.") || 
                    name.startsWith("sun.") || 
                    name.startsWith("com.sun.") ||
-                   name.startsWith("jdk.");
+                   name.startsWith("jdk.") ||
+                   name.startsWith("com.fasterxml.");  // Jacksonライブラリを追加
         }
     }
 

@@ -40,7 +40,7 @@ class MainTest {
     @Test
     @DisplayName("コマンドライン引数の解析 - 最小限の引数")
     void testParseCommandLineArgsMinimal() {
-        String[] args = {testInputDir.toString()};
+        String[] args = {"-i", testInputDir.toString()};
         Main.CommandLineArgs result = Main.parseCommandLineArgs(args);
         
         assertEquals(testInputDir.toString(), result.getInputPath());
@@ -52,10 +52,9 @@ class MainTest {
     @DisplayName("コマンドライン引数の解析 - すべての引数")
     void testParseCommandLineArgsFull() {
         String[] args = {
-            testInputDir.toString(),
-            testOutputFile.toString(),
-            "-p",
-            "test.package"
+            "-i", testInputDir.toString(),
+            "-o", testOutputFile.toString(),
+            "-p", "test.package"
         };
         Main.CommandLineArgs result = Main.parseCommandLineArgs(args);
         
@@ -68,6 +67,33 @@ class MainTest {
     @DisplayName("コマンドライン引数の解析 - 引数なし")
     void testParseCommandLineArgsEmpty() {
         String[] args = {};
+        assertThrows(IllegalArgumentException.class, () -> {
+            Main.parseCommandLineArgs(args);
+        });
+    }
+
+    @Test
+    @DisplayName("コマンドライン引数の解析 - 入力パスなし")
+    void testParseCommandLineArgsNoInput() {
+        String[] args = {"-o", testOutputFile.toString()};
+        assertThrows(IllegalArgumentException.class, () -> {
+            Main.parseCommandLineArgs(args);
+        });
+    }
+
+    @Test
+    @DisplayName("コマンドライン引数の解析 - 不明なオプション")
+    void testParseCommandLineArgsUnknownOption() {
+        String[] args = {"-i", testInputDir.toString(), "-x", "value"};
+        assertThrows(IllegalArgumentException.class, () -> {
+            Main.parseCommandLineArgs(args);
+        });
+    }
+
+    @Test
+    @DisplayName("コマンドライン引数の解析 - オプション値なし")
+    void testParseCommandLineArgsMissingValue() {
+        String[] args = {"-i"};
         assertThrows(IllegalArgumentException.class, () -> {
             Main.parseCommandLineArgs(args);
         });
