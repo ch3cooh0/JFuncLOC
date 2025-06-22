@@ -45,7 +45,7 @@ class MainTest {
         
         assertEquals(testInputDir.toString(), result.getInputPath());
         assertEquals("callgraph.csv", result.getOutputPath());
-        assertNull(result.getTargetPackage());
+        assertNull(result.getTargetPackages());
     }
 
     @Test
@@ -60,7 +60,44 @@ class MainTest {
         
         assertEquals(testInputDir.toString(), result.getInputPath());
         assertEquals(testOutputFile.toString(), result.getOutputPath());
-        assertEquals("test.package", result.getTargetPackage());
+        assertNotNull(result.getTargetPackages());
+        assertEquals(1, result.getTargetPackages().size());
+        assertEquals("test.package", result.getTargetPackages().get(0));
+    }
+
+    @Test
+    @DisplayName("コマンドライン引数の解析 - 複数パッケージ（複数-p指定）")
+    void testParseCommandLineArgsMultiplePackages() {
+        String[] args = {
+            "-i", testInputDir.toString(),
+            "-o", testOutputFile.toString(),
+            "-p", "test.package1",
+            "-p", "test.package2"
+        };
+        Main.CommandLineArgs result = Main.parseCommandLineArgs(args);
+        assertEquals(testInputDir.toString(), result.getInputPath());
+        assertEquals(testOutputFile.toString(), result.getOutputPath());
+        assertNotNull(result.getTargetPackages());
+        assertEquals(2, result.getTargetPackages().size());
+        assertTrue(result.getTargetPackages().contains("test.package1"));
+        assertTrue(result.getTargetPackages().contains("test.package2"));
+    }
+
+    @Test
+    @DisplayName("コマンドライン引数の解析 - 複数パッケージ（カンマ区切り）")
+    void testParseCommandLineArgsCommaSeparatedPackages() {
+        String[] args = {
+            "-i", testInputDir.toString(),
+            "-o", testOutputFile.toString(),
+            "-p", "test.package1,test.package2"
+        };
+        Main.CommandLineArgs result = Main.parseCommandLineArgs(args);
+        assertEquals(testInputDir.toString(), result.getInputPath());
+        assertEquals(testOutputFile.toString(), result.getOutputPath());
+        assertNotNull(result.getTargetPackages());
+        assertEquals(2, result.getTargetPackages().size());
+        assertTrue(result.getTargetPackages().contains("test.package1"));
+        assertTrue(result.getTargetPackages().contains("test.package2"));
     }
 
     @Test

@@ -16,7 +16,7 @@ import java.util.*;
  * コールグラフを構築します。
  */
 public class CallGraphGenerator {
-    private final String targetPackage;
+    private final List<String> targetPackages;
     private final SootConfigurator sootConfigurator;
 
     /**
@@ -24,17 +24,17 @@ public class CallGraphGenerator {
      * パッケージフィルタリングなしでコールグラフを生成します。
      */
     public CallGraphGenerator() {
-        this(null);
+        this((List<String>)null);
     }
 
     /**
      * 指定されたパッケージに限定してコールグラフを生成するコンストラクタ。
      *
-     * @param targetPackage 解析対象のパッケージ名（例: "com.example"）
+     * @param targetPackages 解析対象のパッケージ名リスト（例: ["com.example", "org.sample"]）
      */
-    public CallGraphGenerator(String targetPackage) {
-        this.targetPackage = targetPackage;
-        this.sootConfigurator = new SootConfigurator(targetPackage);
+    public CallGraphGenerator(List<String> targetPackages) {
+        this.targetPackages = targetPackages;
+        this.sootConfigurator = new SootConfigurator(targetPackages);
     }
 
     /**
@@ -43,7 +43,7 @@ public class CallGraphGenerator {
      * このメソッドは以下の処理を行います：
      * 1. Sootの設定を行い、ソースディレクトリを指定
      * 2. コールグラフの生成を有効化
-     * 3. 指定されたパッケージに基づいてフィルタリング（targetPackageが設定されている場合）
+     * 3. 指定されたパッケージに基づいてフィルタリング（targetPackagesが設定されている場合）
      * 4. コールグラフの走査とメソッド間の呼び出し関係の抽出
      * 5. ライブラリクラス（java.*, javax.*, sun.*, com.sun.*, jdk.*）の呼び出しを除外
      *
@@ -68,7 +68,7 @@ public class CallGraphGenerator {
         // コールグラフの構築と解析
         System.out.println("デバッグ: コールグラフ構築開始");
         CallGraph cg = Scene.v().getCallGraph();
-        CallGraphAnalyzer analyzer = new CallGraphAnalyzer(targetPackage);
+        CallGraphAnalyzer analyzer = new CallGraphAnalyzer(targetPackages);
         Map<String, Set<String>> callRelations = analyzer.analyze(cg);
         
         return new CallGraphResult(callRelations);
@@ -78,10 +78,10 @@ public class CallGraphGenerator {
      * Sootの設定を行う内部クラス
      */
     private static class SootConfigurator {
-        private final String targetPackage;
+        private final List<String> targetPackages;
 
-        public SootConfigurator(String targetPackage) {
-            this.targetPackage = targetPackage;
+        public SootConfigurator(List<String> targetPackages) {
+            this.targetPackages = targetPackages;
         }
 
         public void configure(String sourcePath) {
@@ -139,9 +139,13 @@ public class CallGraphGenerator {
             Options.v().setPhaseOption("cg.spark", "pre-jimplify:true");
             
             // パッケージフィルタリングの設定
-            if (targetPackage != null) {
-                System.out.println("デバッグ: パッケージフィルタリング設定: " + targetPackage);
-                Options.v().set_include(Collections.singletonList(targetPackage + ".*"));
+            if (targetPackages != null && !targetPackages.isEmpty()) {
+                System.out.println("デバッグ: パッケージフィルタリング設定: " + String.join(", ", targetPackages));
+                List<String> includeList = new ArrayList<>();
+                for (String pkg : targetPackages) {
+                    includeList.add(pkg + ".*");
+                }
+                Options.v().set_include(includeList);
                 // 除外パッケージの設定を追加
                 List<String> excludePackages = Arrays.asList(
                     "java.*",
@@ -152,7 +156,11 @@ public class CallGraphGenerator {
                     "com.fasterxml.*"  // Jacksonライブラリを除外
                 );
                 Options.v().set_exclude(excludePackages);
+                Options.v().set_no_bodies_for_excluded(true);
             }
+            
+            // ファントム参照を許可する設定
+            Options.v().set_allow_phantom_refs(true);
         }
     }
 
@@ -160,10 +168,10 @@ public class CallGraphGenerator {
      * コールグラフの解析を行う内部クラス
      */
     private static class CallGraphAnalyzer {
-        private final String targetPackage;
+        private final List<String> targetPackages;
 
-        public CallGraphAnalyzer(String targetPackage) {
-            this.targetPackage = targetPackage;
+        public CallGraphAnalyzer(List<String> targetPackages) {
+            this.targetPackages = targetPackages;
         }
 
         public Map<String, Set<String>> analyze(CallGraph cg) {
@@ -191,9 +199,18 @@ public class CallGraphGenerator {
         }
 
         private boolean shouldSkipEdge(SootMethod src, SootMethod tgt) {
-            if (targetPackage != null) {
-                // 呼び出し元のクラスのみをパッケージチェック
-                return !src.getDeclaringClass().getName().startsWith(targetPackage);
+            // System.out.println("デバッグ: エッジスキップ判定開始:");
+            System.out.println(src.getDeclaringClass().getName() + ": " + tgt.getDeclaringClass().getName());
+            if (targetPackages != null && !targetPackages.isEmpty()) {
+                boolean match = false;
+                String srcClass = src.getDeclaringClass().getName();
+                for (String pkg : targetPackages) {
+                    if (srcClass.startsWith(pkg)) {
+                        match = true;
+                        break;
+                    }
+                }
+                return !match;
             }
             return isLibraryClass(src.getDeclaringClass()) || isLibraryClass(tgt.getDeclaringClass());
         }

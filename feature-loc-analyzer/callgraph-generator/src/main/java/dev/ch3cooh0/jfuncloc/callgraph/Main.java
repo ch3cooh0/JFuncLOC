@@ -5,8 +5,10 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.ArrayList;
 
 /**
  * コールグラフ生成ツールのメインクラス。
@@ -66,17 +68,17 @@ public class Main {
     static class CommandLineArgs {
         private final String inputPath;
         private final String outputPath;
-        private final String targetPackage;
+        private final List<String> targetPackages;
 
-        public CommandLineArgs(String inputPath, String outputPath, String targetPackage) {
+        public CommandLineArgs(String inputPath, String outputPath, List<String> targetPackages) {
             this.inputPath = inputPath;
             this.outputPath = outputPath;
-            this.targetPackage = targetPackage;
+            this.targetPackages = targetPackages;
         }
 
         public String getInputPath() { return inputPath; }
         public String getOutputPath() { return outputPath; }
-        public String getTargetPackage() { return targetPackage; }
+        public List<String> getTargetPackages() { return targetPackages; }
     }
 
     /**
@@ -89,7 +91,7 @@ public class Main {
     static CommandLineArgs parseCommandLineArgs(String[] args) {
         String inputPath = null;
         String outputPath = DEFAULT_OUTPUT_FILE;
-        String targetPackage = null;
+        List<String> targetPackages = new ArrayList<>();
 
         for (int i = 0; i < args.length; i++) {
             switch (args[i]) {
@@ -114,7 +116,13 @@ public class Main {
                 case "-p":
                 case "--package":
                     if (i + 1 < args.length) {
-                        targetPackage = args[i + 1];
+                        String pkgs = args[i + 1];
+                        // カンマ区切り対応
+                        for (String pkg : pkgs.split(",")) {
+                            if (!pkg.trim().isEmpty()) {
+                                targetPackages.add(pkg.trim());
+                            }
+                        }
                         i++;
                     } else {
                         throw new IllegalArgumentException("エラー: パッケージ名が指定されていません");
@@ -131,7 +139,7 @@ public class Main {
             throw new IllegalArgumentException("エラー: 入力パスが指定されていません");
         }
 
-        return new CommandLineArgs(inputPath, outputPath, targetPackage);
+        return new CommandLineArgs(inputPath, outputPath, targetPackages.isEmpty() ? null : targetPackages);
     }
 
     /**
@@ -155,8 +163,8 @@ public class Main {
         System.out.println("コールグラフの生成を開始します...");
         System.out.println("入力パス: " + args.getInputPath());
         System.out.println("出力ファイル: " + args.getOutputPath());
-        if (args.getTargetPackage() != null) {
-            System.out.println("対象パッケージ: " + args.getTargetPackage());
+        if (args.getTargetPackages() != null) {
+            System.out.println("対象パッケージ: " + String.join(", ", args.getTargetPackages()));
         }
     }
 
@@ -167,7 +175,7 @@ public class Main {
      * @return 生成されたコールグラフの結果
      */
     static CallGraphResult generateCallGraph(CommandLineArgs args) {
-        CallGraphGenerator generator = new CallGraphGenerator(args.getTargetPackage());
+        CallGraphGenerator generator = new CallGraphGenerator(args.getTargetPackages());
         return generator.buildCallGraph(args.getInputPath());
     }
 
