@@ -16,24 +16,30 @@ import java.util.*;
  * コールグラフを構築します。
  */
 public class CallGraphGenerator {
-    private final List<String> targetPackages;
-    private final SootConfigurator sootConfigurator;
+    private List<String> targetPackages;
+    private SootConfigurator sootConfigurator;
 
     /**
      * デフォルトコンストラクタ。
-     * パッケージフィルタリングなしでコールグラフを生成します。
+     * ターゲットパッケージは指定されません。
      */
     public CallGraphGenerator() {
-        this((List<String>)null);
+        this.targetPackages = null;
+        this.sootConfigurator = new SootConfigurator(null);
     }
-
+    
     /**
-     * 指定されたパッケージに限定してコールグラフを生成するコンストラクタ。
-     *
-     * @param targetPackages 解析対象のパッケージ名リスト（例: ["com.example", "org.sample"]）
+     * ターゲットパッケージを指定してインスタンスを生成します。
+     * @param targetPackages 解析対象のパッケージ
      */
     public CallGraphGenerator(List<String> targetPackages) {
         this.targetPackages = targetPackages;
+        this.sootConfigurator = new SootConfigurator(targetPackages);
+    }
+
+    public void setTargetPackages(List<String> targetPackages) {
+        this.targetPackages = targetPackages;
+        // SootConfiguratorも更新する
         this.sootConfigurator = new SootConfigurator(targetPackages);
     }
 

@@ -30,6 +30,11 @@ public class EntrypointDetector {
         return result;
     }
 
+    public List<EntryPointInfo> detectEntryPoints(String path, List<String> targetPackages) {
+        // 仮実装: 常に空のリストを返す
+        return Collections.emptyList();
+    }
+
     public static String fqcn(Method method) {
         return FqcnUtils.toFqcn(method.getDeclaringClass().getName(), method.getName());
     }
