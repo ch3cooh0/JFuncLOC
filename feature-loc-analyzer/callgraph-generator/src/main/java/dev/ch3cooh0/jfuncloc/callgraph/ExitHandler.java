@@ -21,8 +21,15 @@ class SystemExitHandler implements ExitHandler {
  * テスト用の何もしない実装。
  */
 class NoOpExitHandler implements ExitHandler {
+    private int lastExitCode = 0;
+    
     @Override
     public void exit(int status) {
-        // 何もしない
+        this.lastExitCode = status;
+        // System.exitは呼ばずに、単に終了コードを記録
+    }
+    
+    public int getLastExitCode() {
+        return lastExitCode;
     }
 } 

@@ -34,7 +34,7 @@ class CallGraphGenaratorCliTest {
     @DisplayName("--helpオプションでヘルプが表示される")
     void ヘルプオプションでヘルプが表示される() {
         String[] args = {"--help"};
-        int exitCode = new CommandLine(new CallGraphGenaratorCli(null, new NoOpExitHandler()))
+        int exitCode = new CommandLine(new CallGraphGenaratorCli())
                 .setOut(new PrintWriter(out, true))
                 .setErr(new PrintWriter(err, true))
                 .execute(args);
@@ -48,14 +48,16 @@ class CallGraphGenaratorCliTest {
      */
     @Test
     @DisplayName("入力パスが存在しない場合はエラー終了する")
-    void 存在しない入力パスでエラー終了する() {
+    void testInputPathNotExist() {
         String[] args = {"-i", "notfound", "-o", "dummy.csv"};
-        int exitCode = new CommandLine(new CallGraphGenaratorCli(null, new NoOpExitHandler()))
+        int exitCode = new CommandLine(new CallGraphGenaratorCli())
                 .setOut(new PrintWriter(out, true))
                 .setErr(new PrintWriter(err, true))
                 .execute(args);
         String error = err.toString();
-        assertTrue(error.contains("エラー: 入力パスが存在しません"), "エラーメッセージが含まれるべき");
+        System.out.println("Captured error output: [" + error + "]");
+        System.out.println("Exit code: " + exitCode);
+        assertTrue(error.contains("Error: Input path does not exist"), "エラーメッセージが含まれるべき");
         assertNotEquals(0, exitCode, "異常終了コードであるべき");
     }
 
@@ -77,7 +79,7 @@ class CallGraphGenaratorCliTest {
         when(generator.buildCallGraph(any())).thenReturn(result);
 
         String[] args = {"-i", input.toString(), "-o", output.toString()};
-        int exitCode = new CommandLine(new CallGraphGenaratorCli(generator, new NoOpExitHandler()))
+        int exitCode = new CommandLine(new CallGraphGenaratorCli(generator))
                 .setOut(new PrintWriter(out, true))
                 .setErr(new PrintWriter(err, true))
                 .execute(args);

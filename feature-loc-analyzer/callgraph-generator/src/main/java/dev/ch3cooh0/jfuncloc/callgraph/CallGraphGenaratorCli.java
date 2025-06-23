@@ -11,6 +11,7 @@ import java.nio.file.Paths;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.Callable;
 
 /**
  * コールグラフ生成ツールのメインクラス。
@@ -18,7 +19,9 @@ import java.util.Set;
  */
 @Command(name = "callgraph-generator", mixinStandardHelpOptions = true,
          description = "Javaバイトコードからコールグラフを生成し、CSVファイルとして出力します")
-public class CallGraphGenaratorCli implements Runnable {
+public class CallGraphGenaratorCli implements Callable<Integer> {
+    
+    private int exitCode = 0;
 
     @Option(names = {"-i", "--input"}, required = true,
             description = "入力パス（.jarまたはclassファイルのディレクトリ）")
@@ -43,20 +46,27 @@ public class CallGraphGenaratorCli implements Runnable {
         this.generator = generator;
         this.exitHandler = exitHandler;
     }
+    
+    // テスト用コンストラクタ（exitHandlerは使用しない）
+    public CallGraphGenaratorCli(CallGraphGenerator generator) {
+        this.generator = generator;
+        this.exitHandler = new NoOpExitHandler();
+    }
 
     @Override
-    public void run() {
+    public Integer call() throws Exception {
         validateInputPath(inputPath);
         printExecutionInfo();
 
         CallGraphResult result = generateCallGraph();
         writeCallGraphToFile(result, outputPath);
         printCompletionMessage(outputPath);
+        return 0;
     }
 
-    private void validateInputPath(String inputPath) {
+    private void validateInputPath(String inputPath) throws IllegalArgumentException {
         if (!Files.exists(Paths.get(inputPath))) {
-            throw new IllegalArgumentException("エラー: 入力パスが存在しません: " + inputPath);
+            throw new IllegalArgumentException("Error: Input path does not exist: " + inputPath);
         }
     }
 
@@ -83,7 +93,9 @@ public class CallGraphGenaratorCli implements Runnable {
                 }
             }
         } catch (IOException e) {
-            throw new RuntimeException("ファイル出力に失敗しました: " + e.getMessage(), e);
+            System.err.println("Failed to write output file: " + e.getMessage());
+            this.exitCode = 1;
+            return;
         }
     }
 
