@@ -16,6 +16,6 @@
             ]
         }
     },
-    "forwardPorts": []
-    // git config --global --unset commit.gpgsign && git config --global --unset gpg.format && git config --global --unset gpg.ssh.program
+    "forwardPorts": [],
+    "postStartCommand": "git config --global --unset commit.gpgsign || true && git config --global --unset gpg.format || true && git config --global --unset gpg.ssh.program || true"
 } 
