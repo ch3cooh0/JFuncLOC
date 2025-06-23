@@ -78,6 +78,10 @@ public class EntrypointDetector {
         
         Map<String, FeatureConfig> result = new HashMap<>();
         
+        if (featuresMap == null || featuresMap.isEmpty()) {
+            return result;
+        }
+        
         for (Map.Entry<String, Object> entry : featuresMap.entrySet()) {
             String featureName = entry.getKey();
             Map<String, Object> featureData = (Map<String, Object>) entry.getValue();
