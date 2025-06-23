@@ -1,6 +1,6 @@
 {
     "name": "Java Maven Development",
-    "image": "maven:3.9-eclipse-temurin-17",
+    "dockerFile": "Dockerfile",
     "features": {
         "ghcr.io/devcontainers/features/java:1": {
             "version": "17",
@@ -11,7 +11,8 @@
         "vscode": {
             "extensions": [
                 "vscjava.vscode-java-pack",
-                "vscjava.vscode-maven"
+                "vscjava.vscode-maven",
+                "anthropic.claude-code"
             ]
         }
     },
