@@ -2,7 +2,6 @@ package dev.ch3cooh0.jfuncloc.loc;
 
 import org.junit.jupiter.api.Test;
 import java.util.Map;
-import dev.ch3cooh0.jfuncloc.loc.FunctionLocCounter;
 
 import static org.junit.jupiter.api.Assertions.*;
 
