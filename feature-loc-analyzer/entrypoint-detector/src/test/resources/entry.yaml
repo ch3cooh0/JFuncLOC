@@ -1,0 +1,33 @@
+features:
+  user-management:
+    name: "ユーザー管理機能"
+    description: "ユーザーの作成、更新、削除、認証を行う機能"
+    entry-points:
+      - "com.example.controller.UserController.createUser"
+      - "com.example.controller.UserController.updateUser"
+      - "com.example.controller.UserController.deleteUser"
+      - "com.example.service.AuthService.authenticate"
+    packages:
+      - "com.example.user"
+      - "com.example.auth"
+  
+  order-processing:
+    name: "注文処理機能"
+    description: "商品の注文、決済、配送を管理する機能"
+    entry-points:
+      - "com.example.controller.OrderController.createOrder"
+      - "com.example.controller.OrderController.processPayment"
+    packages:
+      - "com.example.order"
+      - "com.example.payment"
+      - "com.example.shipping"
+  
+  product-catalog:
+    name: "商品カタログ機能"
+    description: "商品の検索、表示、管理を行う機能"
+    entry-points:
+      - "com.example.controller.ProductController.searchProducts"
+      - "com.example.controller.ProductController.getProductDetails"
+    packages:
+      - "com.example.product"
+      - "com.example.catalog"

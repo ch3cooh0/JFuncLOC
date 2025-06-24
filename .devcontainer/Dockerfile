@@ -1,9 +1,12 @@
-FROM maven:3.9-eclipse-temurin-17
+FROM node:20-bullseye
 
-# 必要なパッケージのインストール
-RUN apt-get update && apt-get install -y \
-    git \
-    && rm -rf /var/lib/apt/lists/*
+# Mavenのインストール
+RUN apt-get update && \
+    apt-get install -y maven git && \
+    rm -rf /var/lib/apt/lists/*
+
+# @anthropic-ai/claude-codeのグローバルインストール
+RUN npm install -g @anthropic-ai/claude-code
 
 # 作業ディレクトリの設定
 WORKDIR /workspace
