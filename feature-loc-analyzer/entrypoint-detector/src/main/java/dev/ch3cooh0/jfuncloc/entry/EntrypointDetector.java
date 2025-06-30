@@ -110,18 +110,35 @@ public class EntrypointDetector {
      * @throws IOException ファイル読み込みエラーまたはクラスロードエラー
      */
     public Map<String, Set<String>> detectFromAnnotations(String jarPath, List<String> targetPackages) throws IOException {
+        return detectFromAnnotations(jarPath, targetPackages, new AnnotationConfig());
+    }
+    
+    /**
+     * JARファイルまたはクラスファイルディレクトリから@EntryPointアノテーションを検出します（AnnotationConfig使用）。
+     * 
+     * @param jarPath JARファイルまたはクラスファイルディレクトリのパス
+     * @param targetPackages 検出対象のパッケージリスト（空の場合は全パッケージが対象）
+     * @param annotationConfig アノテーション検出設定
+     * @return 機能名をキーとし、エントリーポイントのFQCNセットを値とするマップ
+     * @throws IOException ファイル読み込みエラーまたはクラスロードエラー
+     */
+    public Map<String, Set<String>> detectFromAnnotations(String jarPath, List<String> targetPackages, AnnotationConfig annotationConfig) throws IOException {
         Map<String, Set<String>> result = new HashMap<>();
         
         if (jarPath.endsWith(".jar")) {
-            result.putAll(detectFromJar(jarPath, targetPackages));
+            result.putAll(detectFromJar(jarPath, targetPackages, annotationConfig));
         } else {
-            result.putAll(detectFromClassPath(jarPath, targetPackages));
+            result.putAll(detectFromClassPath(jarPath, targetPackages, annotationConfig));
         }
         
         return result;
     }
     
     private Map<String, Set<String>> detectFromJar(String jarPath, List<String> targetPackages) throws IOException {
+        return detectFromJar(jarPath, targetPackages, new AnnotationConfig());
+    }
+    
+    private Map<String, Set<String>> detectFromJar(String jarPath, List<String> targetPackages, AnnotationConfig annotationConfig) throws IOException {
         Map<String, Set<String>> result = new HashMap<>();
         
         try (JarFile jarFile = new JarFile(jarPath)) {
@@ -140,7 +157,7 @@ public class EntrypointDetector {
                         if (isTargetPackage(className, targetPackages)) {
                             try {
                                 Class<?> clazz = classLoader.loadClass(className);
-                                processClassForEntryPoints(clazz, result);
+                                processClassForEntryPoints(clazz, result, annotationConfig);
                             } catch (ClassNotFoundException | NoClassDefFoundError e) {
                                 System.err.println("Could not load class: " + className + " - " + e.getMessage());
                             }
@@ -154,6 +171,10 @@ public class EntrypointDetector {
     }
     
     private Map<String, Set<String>> detectFromClassPath(String classPath, List<String> targetPackages) throws IOException {
+        return detectFromClassPath(classPath, targetPackages, new AnnotationConfig());
+    }
+    
+    private Map<String, Set<String>> detectFromClassPath(String classPath, List<String> targetPackages, AnnotationConfig annotationConfig) throws IOException {
         Map<String, Set<String>> result = new HashMap<>();
         
         Path rootPath = Paths.get(classPath);
@@ -173,7 +194,7 @@ public class EntrypointDetector {
                             
                             if (isTargetPackage(className, targetPackages)) {
                                 Class<?> clazz = classLoader.loadClass(className);
-                                processClassForEntryPoints(clazz, result);
+                                processClassForEntryPoints(clazz, result, annotationConfig);
                             }
                         } catch (ClassNotFoundException | NoClassDefFoundError e) {
                             System.err.println("Could not load class from path: " + path + " - " + e.getMessage());
@@ -185,6 +206,10 @@ public class EntrypointDetector {
     }
     
     private void processClassForEntryPoints(Class<?> clazz, Map<String, Set<String>> result) {
+        processClassForEntryPoints(clazz, result, new AnnotationConfig());
+    }
+    
+    private void processClassForEntryPoints(Class<?> clazz, Map<String, Set<String>> result, AnnotationConfig annotationConfig) {
         // 1. 既存の @EntryPoint アノテーション検出
         for (Method method : clazz.getDeclaredMethods()) {
             EntryPoint annotation = method.getAnnotation(EntryPoint.class);
@@ -196,8 +221,63 @@ public class EntrypointDetector {
             }
         }
         
-        // 2. Spring アノテーション検出
-        processSpringAnnotations(clazz, result);
+        // 2. 設定ベースのアノテーション検出
+        processConfigurableAnnotations(clazz, result, annotationConfig);
+    }
+    
+    /**
+     * 設定可能なアノテーションを検出してエントリーポイントとして追加します。
+     * 
+     * @param clazz 検査対象のクラス
+     * @param result 結果を格納するマップ
+     * @param annotationConfig アノテーション設定
+     */
+    private void processConfigurableAnnotations(Class<?> clazz, Map<String, Set<String>> result, AnnotationConfig annotationConfig) {
+        if (!annotationConfig.isEnabled()) {
+            return;
+        }
+        
+        String className = clazz.getSimpleName();
+        
+        // デバッグ用ログ
+        System.out.println("Processing class: " + clazz.getName());
+        
+        // クラスレベルのアノテーション確認
+        boolean isController = false;
+        for (String annotation : annotationConfig.getClassLevelAnnotations()) {
+            if (hasAnnotationByName(clazz, annotation)) {
+                isController = true;
+                System.out.println("  Found class-level annotation: " + annotation);
+                break;
+            }
+        }
+        
+        if (!isController) {
+            System.out.println("  Skipping - not a controller class");
+            return;
+        }
+        
+        System.out.println("  Processing as controller");
+        
+        // メソッドレベルのアノテーション検出
+        for (Method method : clazz.getDeclaredMethods()) {
+            String featureName = null;
+            
+            for (AnnotationMapping mapping : annotationConfig.getMethodLevelAnnotations()) {
+                if (hasAnnotationByName(method, mapping.getAnnotation()) ||
+                    (mapping.getAliases() != null && mapping.getAliases().stream().anyMatch(alias -> hasAnnotationByName(method, alias)))) {
+                    
+                    featureName = generateFeatureName(method, className, mapping);
+                    System.out.println("    Found method annotation: " + mapping.getAnnotation() + " -> " + featureName);
+                    break;
+                }
+            }
+            
+            if (featureName != null) {
+                String methodFqcn = fqcn(method);
+                result.computeIfAbsent(featureName, k -> new HashSet<>()).add(methodFqcn);
+            }
+        }
     }
     
     /**
@@ -212,11 +292,15 @@ public class EntrypointDetector {
         // デバッグ用ログ
         System.out.println("Processing class: " + clazz.getName());
         
-        // クラスレベルのアノテーション確認（実際のSpringアノテーションとテスト用アノテーション）
-        boolean isRestController = hasAnnotation(clazz, "org.springframework.web.bind.annotation.RestController") ||
-                                 hasAnnotation(clazz, "com.example.RestController");
-        boolean isController = hasAnnotation(clazz, "org.springframework.stereotype.Controller") ||
-                             hasAnnotation(clazz, "com.example.Controller");
+        // クラスレベルのアノテーション確認（柔軟な文字列ベースマッチング）
+        boolean isRestController = hasAnnotationByName(clazz, "RestController") ||
+                                 hasAnnotationByName(clazz, "ApiController") ||
+                                 hasAnnotationByName(clazz, "WebController");
+        boolean isController = hasAnnotationByName(clazz, "Controller") ||
+                             hasAnnotationByName(clazz, "RestController") ||
+                             hasAnnotationByName(clazz, "Endpoint") ||
+                             hasAnnotationByName(clazz, "Service") ||
+                             hasAnnotationByName(clazz, "Component");
         
         System.out.println("  isRestController: " + isRestController + ", isController: " + isController);
         
@@ -231,25 +315,23 @@ public class EntrypointDetector {
         for (Method method : clazz.getDeclaredMethods()) {
             String featureName = null;
             
-            // Spring Web アノテーション検出（実際のSpringアノテーションとテスト用アノテーション）
-            if (hasAnnotation(method, "org.springframework.web.bind.annotation.RequestMapping") ||
-                hasAnnotation(method, "com.example.RequestMapping")) {
+            // 柔軟なアノテーション検出（プロジェクト固有のアノテーションにも対応）
+            if (hasAnnotationByName(method, "RequestMapping") || hasAnnotationByName(method, "Mapping")) {
                 featureName = extractFeatureNameFromSpringMapping(method, className, "RequestMapping");
-            } else if (hasAnnotation(method, "org.springframework.web.bind.annotation.GetMapping") ||
-                      hasAnnotation(method, "com.example.GetMapping")) {
+            } else if (hasAnnotationByName(method, "GetMapping") || hasAnnotationByName(method, "Get")) {
                 featureName = extractFeatureNameFromSpringMapping(method, className, "GetMapping");
-            } else if (hasAnnotation(method, "org.springframework.web.bind.annotation.PostMapping") ||
-                      hasAnnotation(method, "com.example.PostMapping")) {
+            } else if (hasAnnotationByName(method, "PostMapping") || hasAnnotationByName(method, "Post")) {
                 featureName = extractFeatureNameFromSpringMapping(method, className, "PostMapping");
-            } else if (hasAnnotation(method, "org.springframework.web.bind.annotation.PutMapping") ||
-                      hasAnnotation(method, "com.example.PutMapping")) {
+            } else if (hasAnnotationByName(method, "PutMapping") || hasAnnotationByName(method, "Put")) {
                 featureName = extractFeatureNameFromSpringMapping(method, className, "PutMapping");
-            } else if (hasAnnotation(method, "org.springframework.web.bind.annotation.DeleteMapping") ||
-                      hasAnnotation(method, "com.example.DeleteMapping")) {
+            } else if (hasAnnotationByName(method, "DeleteMapping") || hasAnnotationByName(method, "Delete")) {
                 featureName = extractFeatureNameFromSpringMapping(method, className, "DeleteMapping");
-            } else if (hasAnnotation(method, "org.springframework.web.bind.annotation.PatchMapping") ||
-                      hasAnnotation(method, "com.example.PatchMapping")) {
+            } else if (hasAnnotationByName(method, "PatchMapping") || hasAnnotationByName(method, "Patch")) {
                 featureName = extractFeatureNameFromSpringMapping(method, className, "PatchMapping");
+            } else if (hasAnnotationByName(method, "ApiEndpoint") || hasAnnotationByName(method, "Endpoint")) {
+                featureName = extractFeatureNameFromSpringMapping(method, className, "ApiEndpoint");
+            } else if (hasAnnotationByName(method, "BusinessLogic") || hasAnnotationByName(method, "Logic")) {
+                featureName = extractFeatureNameFromSpringMapping(method, className, "BusinessLogic");
             }
             
             if (featureName != null) {
@@ -266,21 +348,99 @@ public class EntrypointDetector {
      * @param annotationClassName アノテーションのFQCN
      * @return アノテーションが存在する場合true
      */
+    /**
+     * 文字列ベースでアノテーション検出を行います（ClassLoader問題を回避）。
+     * 
+     * @param element クラスまたはメソッド
+     * @param annotationSimpleName アノテーションのシンプル名
+     * @return アノテーションが存在する場合true
+     */
+    private boolean hasAnnotationByName(java.lang.reflect.AnnotatedElement element, String annotationSimpleName) {
+        return java.util.Arrays.stream(element.getAnnotations())
+                .anyMatch(ann -> ann.annotationType().getSimpleName().equals(annotationSimpleName));
+    }
+    
+    /**
+     * FQCN またはシンプル名でアノテーション検出を行います。
+     * 
+     * @param element クラスまたはメソッド
+     * @param annotationPattern アノテーションのFQCNまたはシンプル名
+     * @return アノテーションが存在する場合true
+     */
+    private boolean hasAnnotationPattern(java.lang.reflect.AnnotatedElement element, String annotationPattern) {
+        return java.util.Arrays.stream(element.getAnnotations())
+                .anyMatch(ann -> {
+                    String fullName = ann.annotationType().getName();
+                    String simpleName = ann.annotationType().getSimpleName();
+                    return fullName.equals(annotationPattern) || 
+                           simpleName.equals(annotationPattern) ||
+                           fullName.endsWith("." + annotationPattern);
+                });
+    }
+    
+    /**
+     * AnnotationMappingに基づいて機能名を生成します。
+     * 
+     * @param method メソッド
+     * @param className クラス名
+     * @param mapping アノテーションマッピング
+     * @return 生成された機能名
+     */
+    private String generateFeatureName(Method method, String className, AnnotationMapping mapping) {
+        String pattern = mapping.getFeaturePattern();
+        
+        if (pattern == null || pattern.isEmpty()) {
+            pattern = mapping.getDefaultFeature();
+        }
+        
+        if (pattern == null || pattern.isEmpty()) {
+            // フォールバック: 従来のロジック使用
+            return extractFeatureNameFromSpringMapping(method, className, mapping.getAnnotation());
+        }
+        
+        // パターン変数を置換
+        String controllerName = className.replace("Controller", "").toLowerCase();
+        String methodName = method.getName();
+        String action = determineAction(methodName);
+        
+        return pattern
+                .replace("{controller}", controllerName)
+                .replace("{method}", methodName)
+                .replace("{action}", action)
+                .replace("{class}", className);
+    }
+    
+    /**
+     * メソッド名からアクション名を決定します。
+     */
+    private String determineAction(String methodName) {
+        if (methodName.startsWith("create") || methodName.startsWith("add")) {
+            return "creation";
+        } else if (methodName.startsWith("update") || methodName.startsWith("edit")) {
+            return "modification";
+        } else if (methodName.startsWith("delete") || methodName.startsWith("remove")) {
+            return "deletion";
+        } else if (methodName.startsWith("get") || methodName.startsWith("find") || methodName.startsWith("list")) {
+            return "retrieval";
+        } else {
+            return "management";
+        }
+    }
+    
+    // 下位互換性のため既存メソッドも保持
     private boolean hasAnnotation(java.lang.reflect.AnnotatedElement element, String annotationClassName) {
+        // まず文字列ベースで試行
+        if (hasAnnotationPattern(element, annotationClassName)) {
+            return true;
+        }
+        
+        // 従来のClassLoader方式も試行（フォールバック）
         try {
             @SuppressWarnings("unchecked")
             Class<? extends java.lang.annotation.Annotation> annotationClass = 
                 (Class<? extends java.lang.annotation.Annotation>) Class.forName(annotationClassName);
-            boolean hasAnnotation = element.getAnnotation(annotationClass) != null;
-            System.out.println("    Checking annotation " + annotationClassName + " on " + element + ": " + hasAnnotation);
-            return hasAnnotation;
-        } catch (ClassNotFoundException e) {
-            // アノテーションクラスがクラスパスにない場合はfalseを返す
-            System.out.println("    Annotation class not found: " + annotationClassName);
-            return false;
-        } catch (ClassCastException e) {
-            // 指定されたクラスがアノテーションでない場合もfalseを返す
-            System.out.println("    Class is not an annotation: " + annotationClassName);
+            return element.getAnnotation(annotationClass) != null;
+        } catch (ClassNotFoundException | ClassCastException e) {
             return false;
         }
     }
@@ -340,10 +500,22 @@ public class EntrypointDetector {
      * @return 検出されたエントリーポイント情報のリスト
      */
     public List<EntryPointInfo> detectEntryPoints(String path, List<String> targetPackages) {
+        return detectEntryPoints(path, targetPackages, new AnnotationConfig());
+    }
+    
+    /**
+     * 指定されたパスからエントリーポイント情報を検出します（AnnotationConfig使用）。
+     * 
+     * @param path JARファイルまたはクラスファイルディレクトリのパス
+     * @param targetPackages 検出対象のパッケージリスト（空の場合は全パッケージが対象）
+     * @param annotationConfig アノテーション検出設定
+     * @return 検出されたエントリーポイント情報のリスト
+     */
+    public List<EntryPointInfo> detectEntryPoints(String path, List<String> targetPackages, AnnotationConfig annotationConfig) {
         List<EntryPointInfo> result = new ArrayList<>();
         
         try {
-            Map<String, Set<String>> entryPoints = detectFromAnnotations(path, targetPackages);
+            Map<String, Set<String>> entryPoints = detectFromAnnotations(path, targetPackages, annotationConfig);
             
             for (Map.Entry<String, Set<String>> entry : entryPoints.entrySet()) {
                 String featureName = entry.getKey();

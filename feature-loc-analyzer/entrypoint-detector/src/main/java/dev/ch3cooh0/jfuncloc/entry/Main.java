@@ -4,13 +4,17 @@ import picocli.CommandLine;
 import picocli.CommandLine.Option;
 import picocli.CommandLine.Command;
 
+import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 /**
  * エントリーポイント検出ツールのメインクラス。
@@ -36,6 +40,18 @@ public class Main implements Runnable {
     @Option(names = {"-f", "--format"}, defaultValue = "yaml", 
             description = "出力形式（yaml または json、デフォルト: yaml）")
     private String outputFormat;
+    
+    @Option(names = {"-c", "--config"}, 
+            description = "アノテーション設定ファイル（YAML/JSON形式）")
+    private String configFile;
+    
+    @Option(names = {"--class-annotations"}, split = ",",
+            description = "クラスレベルアノテーション名をカンマ区切りで指定")
+    private java.util.List<String> classAnnotations;
+    
+    @Option(names = {"--method-annotations"}, split = ",",
+            description = "メソッドレベルアノテーション名をカンマ区切りで指定")
+    private java.util.List<String> methodAnnotations;
 
     @Override
     public void run() {
@@ -46,8 +62,11 @@ public class Main implements Runnable {
             
             printExecutionInfo();
             
+            // アノテーション設定を構築
+            AnnotationConfig annotationConfig = buildAnnotationConfig();
+            
             EntrypointDetector detector = new EntrypointDetector();
-            List<EntryPointInfo> entryPoints = detector.detectEntryPoints(inputPath, targetPackages);
+            List<EntryPointInfo> entryPoints = detector.detectEntryPoints(inputPath, targetPackages, annotationConfig);
             
             writeEntryPointsToFile(entryPoints, outputPath, outputFormat);
             
@@ -93,6 +112,67 @@ public class Main implements Runnable {
         if (targetPackages != null && !targetPackages.isEmpty()) {
             System.out.println("対象パッケージ: " + String.join(", ", targetPackages));
         }
+        if (configFile != null) {
+            System.out.println("設定ファイル: " + configFile);
+        }
+        if (classAnnotations != null && !classAnnotations.isEmpty()) {
+            System.out.println("クラスアノテーション: " + String.join(", ", classAnnotations));
+        }
+        if (methodAnnotations != null && !methodAnnotations.isEmpty()) {
+            System.out.println("メソッドアノテーション: " + String.join(", ", methodAnnotations));
+        }
+    }
+    
+    /**
+     * アノテーション設定を構築します。
+     */
+    private AnnotationConfig buildAnnotationConfig() throws IOException {
+        AnnotationConfig config = new AnnotationConfig();
+        
+        // 設定ファイルから読み込み
+        if (configFile != null) {
+            config = loadAnnotationConfigFromFile(configFile);
+        }
+        
+        // コマンドライン引数で上書き
+        if (classAnnotations != null && !classAnnotations.isEmpty()) {
+            config.setClassLevelAnnotations(new ArrayList<>(classAnnotations));
+        }
+        
+        if (methodAnnotations != null && !methodAnnotations.isEmpty()) {
+            // シンプルなメソッドアノテーション設定
+            List<AnnotationMapping> mappings = new ArrayList<>();
+            for (String annotation : methodAnnotations) {
+                AnnotationMapping mapping = new AnnotationMapping();
+                mapping.setAnnotation(annotation);
+                mapping.setFeaturePattern("{controller}-{action}");
+                mapping.setClassLevel(false);
+                mappings.add(mapping);
+            }
+            config.setMethodLevelAnnotations(mappings);
+        }
+        
+        System.out.println("使用するアノテーション設定: " + config);
+        return config;
+    }
+    
+    /**
+     * 設定ファイルからAnnotationConfigを読み込みます。
+     */
+    private AnnotationConfig loadAnnotationConfigFromFile(String filePath) throws IOException {
+        File file = new File(filePath);
+        if (!file.exists()) {
+            throw new IllegalArgumentException("設定ファイルが存在しません: " + filePath);
+        }
+        
+        ObjectMapper mapper;
+        if (filePath.endsWith(".yaml") || filePath.endsWith(".yml")) {
+            mapper = new ObjectMapper(new com.fasterxml.jackson.dataformat.yaml.YAMLFactory());
+        } else {
+            mapper = new ObjectMapper();
+        }
+        
+        return mapper.readValue(file, AnnotationConfig.class);
     }
 
     /**
