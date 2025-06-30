@@ -134,6 +134,27 @@ public class EntrypointDetector {
         return result;
     }
     
+    /**
+     * 指定されたアノテーション名が付与されたメソッドを直接検出します（シンプル版）。
+     * 
+     * @param jarPath JARファイルまたはクラスファイルディレクトリのパス
+     * @param targetPackages 検出対象のパッケージリスト（空の場合は全パッケージが対象）
+     * @param annotationNames 検出対象のアノテーション名リスト
+     * @return 機能名をキーとし、エントリーポイントのFQCNセットを値とするマップ
+     * @throws IOException ファイル読み込みエラーまたはクラスロードエラー
+     */
+    public Map<String, Set<String>> detectFromSimpleAnnotations(String jarPath, List<String> targetPackages, List<String> annotationNames) throws IOException {
+        Map<String, Set<String>> result = new HashMap<>();
+        
+        if (jarPath.endsWith(".jar")) {
+            result.putAll(detectFromJarSimple(jarPath, targetPackages, annotationNames));
+        } else {
+            result.putAll(detectFromClassPathSimple(jarPath, targetPackages, annotationNames));
+        }
+        
+        return result;
+    }
+    
     private Map<String, Set<String>> detectFromJar(String jarPath, List<String> targetPackages) throws IOException {
         return detectFromJar(jarPath, targetPackages, new AnnotationConfig());
     }
@@ -226,6 +247,25 @@ public class EntrypointDetector {
     }
     
     /**
+     * シンプルなアノテーション検出用のメソッド（クラスレベルフィルタリングなし）
+     */
+    private void processClassForSimpleAnnotations(Class<?> clazz, Map<String, Set<String>> result, List<String> annotationNames) {
+        // 1. 既存の @EntryPoint アノテーション検出
+        for (Method method : clazz.getDeclaredMethods()) {
+            EntryPoint annotation = method.getAnnotation(EntryPoint.class);
+            if (annotation != null) {
+                String featureName = annotation.value();
+                String methodFqcn = fqcn(method);
+                
+                result.computeIfAbsent(featureName, k -> new HashSet<>()).add(methodFqcn);
+            }
+        }
+        
+        // 2. シンプルなアノテーション検出
+        processSimpleAnnotations(clazz, result, annotationNames);
+    }
+    
+    /**
      * 設定可能なアノテーションを検出してエントリーポイントとして追加します。
      * 
      * @param clazz 検査対象のクラス
@@ -276,6 +316,35 @@ public class EntrypointDetector {
             if (featureName != null) {
                 String methodFqcn = fqcn(method);
                 result.computeIfAbsent(featureName, k -> new HashSet<>()).add(methodFqcn);
+            }
+        }
+    }
+    
+    /**
+     * 指定されたアノテーションが付与されたメソッドを直接検出します（シンプル版）。
+     * 
+     * @param clazz 検査対象のクラス
+     * @param result 結果を格納するマップ
+     * @param annotationNames 検出対象のアノテーション名リスト
+     */
+    private void processSimpleAnnotations(Class<?> clazz, Map<String, Set<String>> result, List<String> annotationNames) {
+        if (annotationNames == null || annotationNames.isEmpty()) {
+            return;
+        }
+        
+        System.out.println("Processing class: " + clazz.getName());
+        
+        // 各メソッドをチェック
+        for (Method method : clazz.getDeclaredMethods()) {
+            for (String annotationName : annotationNames) {
+                if (hasAnnotationByName(method, annotationName)) {
+                    // アノテーション名をそのまま機能名として使用
+                    String featureName = annotationName + "-" + clazz.getSimpleName() + "#" + method.getName();
+                    String methodFqcn = fqcn(method);
+                    
+                    result.computeIfAbsent(featureName, k -> new HashSet<>()).add(methodFqcn);
+                    System.out.println("  Found annotation @" + annotationName + " on method: " + method.getName() + " -> " + featureName);
+                }
             }
         }
     }
@@ -474,6 +543,75 @@ public class EntrypointDetector {
             // その他の場合はコントローラー名ベースの機能名
             return controllerName + "-management";
         }
+    }
+    
+    /**
+     * JARファイルからシンプルなアノテーション検出を行います。
+     */
+    private Map<String, Set<String>> detectFromJarSimple(String jarPath, List<String> targetPackages, List<String> annotationNames) throws IOException {
+        Map<String, Set<String>> result = new HashMap<>();
+        
+        try (JarFile jarFile = new JarFile(jarPath)) {
+            URL[] urls = {new File(jarPath).toURI().toURL()};
+            try (URLClassLoader classLoader = new URLClassLoader(urls)) {
+                
+                Enumeration<JarEntry> entries = jarFile.entries();
+                while (entries.hasMoreElements()) {
+                    JarEntry entry = entries.nextElement();
+                    
+                    if (entry.getName().endsWith(".class") && !entry.getName().contains("$")) {
+                        String className = entry.getName()
+                                .replace('/', '.')
+                                .replace(".class", "");
+                        
+                        if (isTargetPackage(className, targetPackages)) {
+                            try {
+                                Class<?> clazz = classLoader.loadClass(className);
+                                processClassForSimpleAnnotations(clazz, result, annotationNames);
+                            } catch (ClassNotFoundException | NoClassDefFoundError e) {
+                                System.err.println("Could not load class: " + className + " - " + e.getMessage());
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        return result;
+    }
+    
+    /**
+     * クラスパスからシンプルなアノテーション検出を行います。
+     */
+    private Map<String, Set<String>> detectFromClassPathSimple(String classPath, List<String> targetPackages, List<String> annotationNames) throws IOException {
+        Map<String, Set<String>> result = new HashMap<>();
+        
+        Path rootPath = Paths.get(classPath);
+        if (!Files.exists(rootPath)) {
+            return result;
+        }
+        
+        try (URLClassLoader classLoader = new URLClassLoader(new URL[]{rootPath.toUri().toURL()})) {
+            Files.walk(rootPath)
+                    .filter(path -> path.toString().endsWith(".class"))
+                    .forEach(path -> {
+                        try {
+                            String relativePath = rootPath.relativize(path).toString();
+                            String className = relativePath
+                                    .replace(File.separatorChar, '.')
+                                    .replace(".class", "");
+                            
+                            if (isTargetPackage(className, targetPackages)) {
+                                Class<?> clazz = classLoader.loadClass(className);
+                                processClassForSimpleAnnotations(clazz, result, annotationNames);
+                            }
+                        } catch (ClassNotFoundException | NoClassDefFoundError e) {
+                            System.err.println("Could not load class from path: " + path + " - " + e.getMessage());
+                        }
+                    });
+        }
+        
+        return result;
     }
     
     private boolean isTargetPackage(String className, List<String> targetPackages) {

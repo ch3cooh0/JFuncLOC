@@ -4,7 +4,11 @@ JFuncLOCは、Javaアプリケーションの機能別LOC（Lines of Code）計�
 
 ## 特徴
 
-- **エントリーポイント指定**: `@EntryPoint`アノテーションやYAML/JSONファイルで機能の起点を定義
+- **柔軟なエントリーポイント指定**: 
+  - `@EntryPoint`アノテーション
+  - 設定可能なSpringアノテーション（@RestController、@GetMapping等）
+  - YAML/JSONファイルによる機能定義
+  - 機能名生成パターンとエイリアス機能
 - **コールグラフ解析**: Sootライブラリを使用してJAR/クラスファイルからコールグラフを生成
 - **精密なLOC計測**: Spoonライブラリによるソースコード解析で関数・クラスレベルのLOC計測
 - **パッケージフィルタリング**: 指定パッケージ配下のみを計測対象とする機能
@@ -164,9 +168,26 @@ Map<String, Integer> classLoc = counter.countClassLines("/path/to/source", packa
 
 ### entrypoint-detector
 
-エントリーポイントの検出を2つの方法で行います。
+エントリーポイントの検出を3つの方法で行います。
 
-#### 1. アノテーションベース検出
+#### 使用方法
+
+```bash
+java -jar entrypoint-detector/target/entrypoint-detector.jar [オプション]
+```
+
+#### オプション
+
+- `-i, --input <パス>`: Javaプロジェクトディレクトリ（必須）
+- `-o, --output <パス>`: 出力ファイルパス（デフォルト: entrypoints.yaml）
+- `-f, --format <形式>`: 出力形式（yaml または json、デフォルト: yaml）
+- `-c, --config <パス>`: アノテーション設定ファイル（YAML/JSON形式）
+- `-p, --package <名前>`: 対象パッケージ名（複数指定可能）
+- `--class-annotations <名前>`: クラスレベルアノテーション名（複数指定可能）
+- `--method-annotations <名前>`: メソッドレベルアノテーション名（複数指定可能）
+- `--annotations <名前>`: 検出対象のアノテーション名（シンプル版：指定したアノテーションが付与されたメソッドを直接検出、複数指定可能）
+
+#### 1. アノテーションベース検出（@EntryPoint）
 
 `@EntryPoint`アノテーションが付与されたメソッドを検出：
 
@@ -179,16 +200,140 @@ public class UserController {
     public ResponseEntity<User> createUser(@RequestBody User user) {
         return ResponseEntity.ok(userService.createUser(user));
     }
+}
+```
+
+#### 1-2. シンプルアノテーション検出
+
+指定したアノテーション名が付与されたメソッドを直接検出（クラスレベルフィルタリングなし）：
+
+```bash
+# hogehogeアノテーションが付与されたメソッドを検出
+java -jar entrypoint-detector.jar -i /path/to/project --annotations hogehoge
+
+# 複数のアノテーションを検出
+java -jar entrypoint-detector.jar -i /path/to/project --annotations GetMapping,PostMapping,hogehoge
+```
+
+**対象となるJavaコード例：**
+```java
+public class TestController {
     
-    @EntryPoint("user-management")
-    @PutMapping("/users/{id}")
-    public ResponseEntity<User> updateUser(@PathVariable Long id, @RequestBody User user) {
-        return ResponseEntity.ok(userService.updateUser(id, user));
+    @hogehoge  // このメソッドが検出される
+    public String testMethod() {
+        return "test";
+    }
+    
+    @GetMapping  // このメソッドも検出される（複数指定時）
+    public String getMethod() {
+        return "get";
+    }
+    
+    public String normalMethod() {  // アノテーションなし：検出されない
+        return "normal";
     }
 }
 ```
 
-#### 2. ファイルベース検出
+**出力例：**
+```yaml
+entrypoints:
+  - name: hogehoge-TestController#testMethod
+    class: com.example
+    method: TestController#testMethod
+  - name: GetMapping-TestController#getMethod
+    class: com.example
+    method: TestController#getMethod
+```
+
+#### 2. 設定可能なアノテーション検出
+
+コマンドライン引数または設定ファイルでアノテーションを指定してエントリーポイントを検出：
+
+##### コマンドライン引数による指定
+
+```bash
+# Springアノテーションの検出
+java -jar entrypoint-detector.jar -i /path/to/project \
+  --class-annotations RestController,Service \
+  --method-annotations GetMapping,PostMapping
+```
+
+##### 設定ファイルによる指定
+
+**YAML設定ファイル例（annotation-config.yaml）：**
+```yaml
+# クラスレベルアノテーション（これらのアノテーションが付与されたクラスのみを処理対象とする）
+classLevelAnnotations:
+  - "RestController"
+  - "Service"
+
+# メソッドレベルアノテーション（機能名生成パターンとエイリアス設定）
+methodLevelAnnotations:
+  - annotation: "GetMapping"
+    featurePattern: "query-{controller}-{method}"
+  - annotation: "PostMapping"
+    featurePattern: "cmd-{controller}-{method}"
+  - annotation: "BusinessLogic"
+    featurePattern: "business-{class}-{method}"
+    aliases: ["BizLogic", "Logic"]
+
+# デフォルトの機能名生成パターン
+defaultFeaturePattern: "{controller}-{method}"
+
+# 機能有効フラグ
+enabled: true
+```
+
+**JSON設定ファイル例（annotation-config.json）：**
+```json
+{
+  "classLevelAnnotations": ["RestController", "Service"],
+  "methodLevelAnnotations": [
+    {
+      "annotation": "GetMapping",
+      "featurePattern": "query-{controller}-{method}"
+    },
+    {
+      "annotation": "PostMapping", 
+      "featurePattern": "cmd-{controller}-{method}"
+    }
+  ],
+  "defaultFeaturePattern": "{controller}-{method}",
+  "enabled": true
+}
+```
+
+##### 機能名生成パターン
+
+以下の変数を使用して機能名を自動生成できます：
+
+- `{controller}`: クラス名から「Controller」を除いた部分（例：UserController → user）
+- `{method}`: メソッド名
+- `{action}`: メソッド名をアクション形式に変換（例：createUser → creation）
+- `{class}`: 完全なクラス名
+
+**例：**
+- パターン `"query-{controller}-{method}"` + メソッド `UserController.getUsers()` → `"query-user-getUsers"`
+- パターン `"cmd-{controller}-{action}"` + メソッド `UserController.createUser()` → `"cmd-user-creation"`
+
+##### エイリアス機能
+
+アノテーション名のエイリアスを設定可能：
+
+```yaml
+methodLevelAnnotations:
+  - annotation: "HttpGet"
+    featurePattern: "query-{controller}-{method}"
+    aliases: ["GetMapping", "Get"]
+  - annotation: "HttpPost"
+    featurePattern: "cmd-{controller}-{method}"
+    aliases: ["PostMapping", "Post"]
+```
+
+この設定により、`@HttpGet`、`@GetMapping`、`@Get`のいずれも同一のパターンで処理されます。
+
+#### 3. ファイルベース検出
 
 YAML/JSONファイルから機能定義を読み込み：
 
@@ -203,7 +348,56 @@ features:
       - "com.example.user"
 ```
 
-JSON形式でも同様に定義可能です。
+#### 出力形式
+
+**YAML形式：**
+```yaml
+entrypoints:
+  - name: query-user-getUsers
+    class: com.example
+    method: UserController#getUsers
+  - name: cmd-user-createUser
+    class: com.example
+    method: UserController#createUser
+```
+
+**JSON形式：**
+```json
+{
+  "entrypoints": [
+    {
+      "name": "query-user-getUsers",
+      "class": "com.example",
+      "method": "UserController#getUsers"
+    }
+  ]
+}
+```
+
+#### 実行例
+
+```bash
+# 基本的な使用方法（@EntryPointアノテーションのみ）
+java -jar entrypoint-detector.jar -i /path/to/project
+
+# シンプルアノテーション検出（推奨）
+java -jar entrypoint-detector.jar -i /path/to/project --annotations hogehoge
+java -jar entrypoint-detector.jar -i /path/to/project --annotations GetMapping,PostMapping
+
+# 設定ファイルを使用（複雑な設定）
+java -jar entrypoint-detector.jar -i /path/to/project -c annotation-config.yaml
+
+# Springアノテーションの検出（複雑な設定）
+java -jar entrypoint-detector.jar -i /path/to/project \
+  --class-annotations RestController \
+  --method-annotations GetMapping,PostMapping
+
+# JSON形式で出力
+java -jar entrypoint-detector.jar -i /path/to/project --annotations hogehoge -f json -o result.json
+
+# パッケージフィルタリング付き
+java -jar entrypoint-detector.jar -i /path/to/project --annotations hogehoge -p com.example
+```
 
 #### プログラマティック使用例
 
@@ -214,9 +408,17 @@ EntrypointDetector detector = new EntrypointDetector();
 File configFile = new File("features.yaml");
 Map<String, FeatureConfig> configs = detector.detectFromFile(configFile);
 
-// アノテーションからエントリーポイントを検出
+// シンプルアノテーション検出（新機能・推奨）
+List<String> annotationNames = Arrays.asList("hogehoge", "GetMapping");
 List<String> packages = Arrays.asList("com.example");
+Map<String, Set<String>> simpleResults = detector.detectFromSimpleAnnotations("/path/to/project", packages, annotationNames);
+
+// 従来のアノテーション検出
 Map<String, Set<String>> annotations = detector.detectFromAnnotations("app.jar", packages);
+
+// 設定可能なアノテーション検出（複雑な設定）
+AnnotationConfig config = AnnotationConfig.loadFromFile("annotation-config.yaml");
+List<EntryPointResult> results = detector.detectConfigurableAnnotations("/path/to/project", config);
 ```
 
 ### feature-loc-aggregator

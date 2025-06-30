@@ -52,6 +52,10 @@ public class Main implements Runnable {
     @Option(names = {"--method-annotations"}, split = ",",
             description = "メソッドレベルアノテーション名をカンマ区切りで指定")
     private java.util.List<String> methodAnnotations;
+    
+    @Option(names = {"--annotations"}, split = ",",
+            description = "検出対象のアノテーション名をカンマ区切りで指定（シンプル版：指定したアノテーションが付与されたメソッドを直接検出）")
+    private java.util.List<String> simpleAnnotations;
 
     @Override
     public void run() {
@@ -62,11 +66,17 @@ public class Main implements Runnable {
             
             printExecutionInfo();
             
-            // アノテーション設定を構築
-            AnnotationConfig annotationConfig = buildAnnotationConfig();
-            
             EntrypointDetector detector = new EntrypointDetector();
-            List<EntryPointInfo> entryPoints = detector.detectEntryPoints(inputPath, targetPackages, annotationConfig);
+            List<EntryPointInfo> entryPoints;
+            
+            // シンプルアノテーション検出が指定されている場合
+            if (simpleAnnotations != null && !simpleAnnotations.isEmpty()) {
+                entryPoints = detectUsingSimpleAnnotations(detector);
+            } else {
+                // 従来の複雑なアノテーション設定による検出
+                AnnotationConfig annotationConfig = buildAnnotationConfig();
+                entryPoints = detector.detectEntryPoints(inputPath, targetPackages, annotationConfig);
+            }
             
             writeEntryPointsToFile(entryPoints, outputPath, outputFormat);
             
@@ -121,6 +131,28 @@ public class Main implements Runnable {
         if (methodAnnotations != null && !methodAnnotations.isEmpty()) {
             System.out.println("メソッドアノテーション: " + String.join(", ", methodAnnotations));
         }
+        if (simpleAnnotations != null && !simpleAnnotations.isEmpty()) {
+            System.out.println("シンプルアノテーション: " + String.join(", ", simpleAnnotations));
+        }
+    }
+    
+    /**
+     * シンプルアノテーション検出を実行します。
+     */
+    private List<EntryPointInfo> detectUsingSimpleAnnotations(EntrypointDetector detector) throws IOException {
+        System.out.println("シンプルアノテーション検出モードを使用します。");
+        
+        Map<String, java.util.Set<String>> entryPointsMap = detector.detectFromSimpleAnnotations(inputPath, targetPackages, simpleAnnotations);
+        
+        List<EntryPointInfo> result = new ArrayList<>();
+        for (Map.Entry<String, java.util.Set<String>> entry : entryPointsMap.entrySet()) {
+            String featureName = entry.getKey();
+            for (String methodFqcn : entry.getValue()) {
+                result.add(new EntryPointInfo(featureName, methodFqcn));
+            }
+        }
+        
+        return result;
     }
     
     /**
