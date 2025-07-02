@@ -1,0 +1,24 @@
+name: Build JAR
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Set up JDK 17
+        uses: actions/setup-java@v3
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Build with Maven
+        run: mvn -B -f feature-loc-analyzer/pom.xml package
+      - name: Upload artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: feature-loc-aggregator
+          path: feature-loc-analyzer/feature-loc-aggregator/target/feature-loc-aggregator-*.jar
